@@ -41,6 +41,8 @@ function EntitySection({ title, path, data, fields, initial, archive = false, ch
   const [editing, setEditing] = useState<EntityRow | null>(null)
   const queryClient = useQueryClient()
   const { showToast } = useToast()
+  // path — ключ кэша запроса без косой черты; адрес API начинается с неё.
+  const url = `/${path}`
   const invalidate = () => queryClient.invalidateQueries({ queryKey: [path] })
   const submit = async (values: FormValues) => {
     const payload = { ...values }
@@ -49,7 +51,7 @@ function EntitySection({ title, path, data, fields, initial, archive = false, ch
       if (!editing) delete payload.is_active
     }
     if (editing && (path === 'classes' || path === 'academic-periods')) delete payload.academic_year_id
-    await send(editing ? `${path}/${editing.id}` : path, editing ? 'PATCH' : 'POST', payload)
+    await send(editing ? `${url}/${editing.id}` : url, editing ? 'PATCH' : 'POST', payload)
     await invalidate()
     setEditing(null)
     showToast('Данные сохранены')
@@ -70,7 +72,7 @@ function EntitySection({ title, path, data, fields, initial, archive = false, ch
               {archive && (
                 <SaveButton danger onClick={async () => {
                   if (!window.confirm('Архивировать запись? Исторические учебные данные сохранятся.')) return
-                  await send(`${path}/${row.id}`, 'DELETE')
+                  await send(`${url}/${row.id}`, 'DELETE')
                   await invalidate()
                   showToast('Запись архивирована')
                 }}><Archive />Архивировать</SaveButton>

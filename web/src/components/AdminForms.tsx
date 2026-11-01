@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useId, useState, type FormEvent } from 'react'
 import { ApiError } from '../api/client'
 import { useToast } from './toastContext'
 import { Field } from './UI'
@@ -14,6 +14,8 @@ export function AdminForm({ fields, initial, submitLabel = 'Сохранить',
   onCancel?: () => void
 }): React.JSX.Element {
   const [values, setValues] = useState<FormValues>(initial ?? {})
+  // На одной странице бывает несколько форм с одинаковыми полями: id уникален для каждой формы.
+  const formId = useId()
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
@@ -33,7 +35,7 @@ export function AdminForm({ fields, initial, submitLabel = 'Сохранить',
       const toggle = (option: string, checked: boolean) => setValues((current) => ({ ...current, [field.name]: checked ? [...selected, option] : selected.filter((item) => item !== option) }))
       return <fieldset className="checkbox-group" key={field.name}><legend>{field.label}{field.required ? ' *' : ''}</legend>{field.options?.map((option) => <label key={option.value}><input type="checkbox" checked={selected.includes(option.value)} onChange={(event) => toggle(option.value, event.target.checked)} />{option.label}</label>)}{field.hint && <small>{field.hint}</small>}{fieldErrors[field.name] && <small className="field-error" role="alert">{fieldErrors[field.name]}</small>}</fieldset>
     }
-    return <Field key={field.name} label={field.label} htmlFor={`admin-${field.name}`} error={fieldErrors[field.name]} hint={field.hint}>{field.type === 'checkbox' ? <input id={`admin-${field.name}`} type="checkbox" checked={Boolean(value)} onChange={(event) => update(event.target.checked)} /> : field.type === 'textarea' ? <textarea id={`admin-${field.name}`} required={field.required} value={String(value ?? '')} onChange={(event) => update(event.target.value)} /> : field.type === 'select' ? <select id={`admin-${field.name}`} required={field.required} value={String(value ?? '')} onChange={(event) => update(event.target.value)}><option value="">Выберите…</option>{field.options?.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select> : <input id={`admin-${field.name}`} type={field.type ?? 'text'} required={field.required} min={field.min} max={field.max} step={field.step} value={String(value ?? '')} onChange={(event) => update(field.type === 'number' ? Number(event.target.value) : event.target.value)} />}</Field>
+    return <Field key={field.name} label={field.label} htmlFor={`${formId}-${field.name}`} error={fieldErrors[field.name]} hint={field.hint}>{field.type === 'checkbox' ? <input id={`${formId}-${field.name}`} type="checkbox" checked={Boolean(value)} onChange={(event) => update(event.target.checked)} /> : field.type === 'textarea' ? <textarea id={`${formId}-${field.name}`} required={field.required} value={String(value ?? '')} onChange={(event) => update(event.target.value)} /> : field.type === 'select' ? <select id={`${formId}-${field.name}`} required={field.required} value={String(value ?? '')} onChange={(event) => update(event.target.value)}><option value="">Выберите…</option>{field.options?.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select> : <input id={`${formId}-${field.name}`} type={field.type ?? 'text'} required={field.required} min={field.min} max={field.max} step={field.step} value={String(value ?? '')} onChange={(event) => update(field.type === 'number' ? Number(event.target.value) : event.target.value)} />}</Field>
   })}{error && <div className="form-error" role="alert">{error}</div>}<div className="card-actions"><button className="button primary" disabled={pending}>{pending ? 'Сохраняем…' : submitLabel}</button>{onCancel && <button type="button" className="button secondary" onClick={onCancel}>Отмена</button>}</div></form>
 }
 

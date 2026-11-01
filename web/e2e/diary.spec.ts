@@ -378,6 +378,28 @@ test('system administrator sees service health, load and database state', async 
   await expect(page.getByRole('heading', { name: 'Параметры школы' })).toBeVisible()
 })
 
+test('administrator creates, renames and archives a room in the structure section', async ({ page }) => {
+  await login(page, 'demo-admin', 'admin')
+  await page.goto('/admin?tab=structure')
+  const rooms = page.locator('section.admin-entity').filter({ has: page.getByRole('heading', { name: 'Кабинеты', exact: true }) })
+  const name = `Кабинет e2e ${Date.now().toString(36)}`
+  await rooms.locator('summary').click()
+  await rooms.getByLabel(/^Название/).fill(name)
+  await rooms.getByRole('button', { name: 'Создать' }).click()
+  const row = rooms.locator('.entity-row').filter({ hasText: name })
+  await expect(row).toBeVisible()
+
+  await row.getByRole('button', { name: `Изменить ${name}` }).click()
+  await rooms.getByLabel(/^Название/).fill(`${name} (ремонт)`)
+  await rooms.getByRole('button', { name: 'Сохранить изменения' }).click()
+  const renamed = rooms.locator('.entity-row').filter({ hasText: `${name} (ремонт)` })
+  await expect(renamed).toBeVisible()
+
+  page.once('dialog', (dialog) => void dialog.accept())
+  await renamed.getByRole('button', { name: 'Архивировать' }).click()
+  await expect(renamed).toHaveCount(0)
+})
+
 // Последним: перенос меняет данные II четверти. В новой четверти нет назначений, и предмет в шаблоне выбрать нельзя,
 // пока назначения и шаблон не перенесены из предыдущего периода.
 test('administrator carries assignments and the weekly template into a new period', async ({ page }) => {
