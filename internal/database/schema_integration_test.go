@@ -157,6 +157,56 @@ func TestSchemaConstraintsAndQueries(t *testing.T) {
 	expectRawViolation(t, ctx, tx, "UPDATE audit_logs SET action = 'mutated' WHERE request_id = 'integration-test'")
 }
 
+// Связь, созданная «сегодня» по школьному времени, действует сразу, даже когда дата в часовом поясе сессии
+// PostgreSQL (в контейнере — UTC) другая. UTC+14 и UTC−12 разнесены на 26 часов, поэтому в любой момент хотя бы
+// в одном из них дата отличается от даты UTC — тест не зависит от времени запуска.
+func TestSchoolTodayFollowsSchoolTimezone(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is not set")
+	}
+	ctx := context.Background()
+	pool, err := database.Connect(ctx, migratedDatabase(t, ctx, databaseURL))
+	must(t, err)
+	defer pool.Close()
+
+	for _, zone := range []string{"Pacific/Kiritimati", "Etc/GMT+12"} {
+		t.Run(zone, func(t *testing.T) {
+			location, err := time.LoadLocation(zone)
+			must(t, err)
+			tx, err := pool.Begin(ctx)
+			must(t, err)
+			defer func() { _ = tx.Rollback(ctx) }()
+			_, err = tx.Exec(ctx, "SET LOCAL TimeZone = 'UTC'")
+			must(t, err)
+			_, err = tx.Exec(ctx, "UPDATE school_settings SET timezone = $1", zone)
+			must(t, err)
+			q := db.New(pool).WithTx(tx)
+
+			local := time.Now().In(location)
+			today := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, time.UTC)
+			var schoolToday time.Time
+			must(t, tx.QueryRow(ctx, "SELECT school_today()").Scan(&schoolToday))
+			if !schoolToday.Equal(today) {
+				t.Fatalf("school_today() = %s, want %s", schoolToday.Format(time.DateOnly), today.Format(time.DateOnly))
+			}
+
+			studentUser := createUser(t, ctx, q, "student-tz")
+			student, err := q.CreateStudent(ctx, db.CreateStudentParams{UserID: studentUser.ID})
+			must(t, err)
+			parentUser := createUser(t, ctx, q, "parent-tz")
+			parent, err := q.CreateParent(ctx, parentUser.ID)
+			must(t, err)
+			must(t, q.LinkParentStudent(ctx, db.LinkParentStudentParams{ParentID: parent.ID, StudentID: student.ID, ValidFrom: today}))
+			children, err := q.ListChildren(ctx, parentUser.ID)
+			must(t, err)
+			if len(children) != 1 || children[0].ID != student.ID {
+				t.Fatalf("children = %v, want the student linked today", children)
+			}
+		})
+	}
+}
+
 func createUser(t *testing.T, ctx context.Context, q *db.Queries, login string) db.CreateUserRow {
 	t.Helper()
 	user, err := q.CreateUser(ctx, db.CreateUserParams{

@@ -217,6 +217,10 @@ func TestImportEnrollmentAndPromotion(t *testing.T) {
 	admin.request(http.MethodPost, "/api/v1/users/import", map[string]any{"rows": []map[string]any{}}, http.StatusUnprocessableEntity)
 
 	// Перевод класса целиком.
+	// Импорт зачислил учеников «сегодня» по школьному времени; перевод — на следующий день.
+	moscow, err := time.LoadLocation("Europe/Moscow")
+	mustTest(t, err)
+	promoteOn := time.Now().In(moscow).AddDate(0, 0, 1).Format(time.DateOnly)
 	var target struct {
 		ID uuid.UUID `json:"id"`
 	}
@@ -228,12 +232,12 @@ func TestImportEnrollmentAndPromotion(t *testing.T) {
 		Processed int `json:"processed"`
 		Skipped   int `json:"skipped"`
 	}
-	decodeResponse(t, admin.request(http.MethodPost, "/api/v1/classes/"+f.classID.String()+"/promote", map[string]any{"target_class_id": target.ID, "starts_on": "2026-11-02"}, http.StatusOK), &moved)
+	decodeResponse(t, admin.request(http.MethodPost, "/api/v1/classes/"+f.classID.String()+"/promote", map[string]any{"target_class_id": target.ID, "starts_on": promoteOn}, http.StatusOK), &moved)
 	if moved.Processed != 4 || moved.Skipped != 0 {
 		t.Fatalf("promotion result: %+v", moved)
 	}
-	admin.request(http.MethodPost, "/api/v1/classes/"+f.classID.String()+"/promote", map[string]any{"target_class_id": target.ID, "starts_on": "2026-11-02"}, http.StatusUnprocessableEntity) // в классе уже никого нет
-	admin.request(http.MethodPost, "/api/v1/classes/"+f.classID.String()+"/promote", map[string]any{"target_class_id": f.classID, "starts_on": "2026-11-02"}, http.StatusUnprocessableEntity)
+	admin.request(http.MethodPost, "/api/v1/classes/"+f.classID.String()+"/promote", map[string]any{"target_class_id": target.ID, "starts_on": promoteOn}, http.StatusUnprocessableEntity) // в классе уже никого нет
+	admin.request(http.MethodPost, "/api/v1/classes/"+f.classID.String()+"/promote", map[string]any{"target_class_id": f.classID, "starts_on": promoteOn}, http.StatusUnprocessableEntity)
 	var inTarget int
 	_ = f.pool.QueryRow(context.Background(), "SELECT count(*) FROM enrollments WHERE class_id = $1 AND ends_on IS NULL", target.ID).Scan(&inTarget)
 	if inTarget != 4 {
@@ -245,11 +249,11 @@ func TestImportEnrollmentAndPromotion(t *testing.T) {
 		t.Fatalf("source enrollments remained open: %d", oldOpen)
 	}
 	// Массовое зачисление пропускает уже зачисленных.
-	decodeResponse(t, admin.request(http.MethodPost, "/api/v1/enrollments/bulk", map[string]any{"student_ids": []uuid.UUID{f.studentID, f.otherStudentID}, "class_id": target.ID, "starts_on": "2026-11-02"}, http.StatusOK), &moved)
+	decodeResponse(t, admin.request(http.MethodPost, "/api/v1/enrollments/bulk", map[string]any{"student_ids": []uuid.UUID{f.studentID, f.otherStudentID}, "class_id": target.ID, "starts_on": promoteOn}, http.StatusOK), &moved)
 	if moved.Processed != 1 || moved.Skipped != 1 { // otherStudent был без класса, studentID уже переведён
 		t.Fatalf("bulk enroll: %+v", moved)
 	}
-	decodeResponse(t, admin.request(http.MethodPost, "/api/v1/enrollments/bulk", map[string]any{"student_ids": []uuid.UUID{f.studentID}, "class_id": target.ID, "starts_on": "2026-11-02"}, http.StatusOK), &moved)
+	decodeResponse(t, admin.request(http.MethodPost, "/api/v1/enrollments/bulk", map[string]any{"student_ids": []uuid.UUID{f.studentID}, "class_id": target.ID, "starts_on": promoteOn}, http.StatusOK), &moved)
 	if moved.Processed != 0 || moved.Skipped != 1 {
 		t.Fatalf("repeated bulk enroll: %+v", moved)
 	}

@@ -57,16 +57,16 @@ func (q *Queries) RecentAuditWithActor(ctx context.Context, limit int32) ([]Rece
 
 const schoolAlertCounts = `-- name: SchoolAlertCounts :one
 SELECT (SELECT count(*) FROM students st JOIN users u ON u.id = st.user_id WHERE u.is_active AND NOT EXISTS (
-          SELECT 1 FROM enrollments e WHERE e.student_id = st.id AND e.starts_on <= current_date AND (e.ends_on IS NULL OR e.ends_on >= current_date)))::int AS unenrolled_students,
+          SELECT 1 FROM enrollments e WHERE e.student_id = st.id AND e.starts_on <= school_today() AND (e.ends_on IS NULL OR e.ends_on >= school_today())))::int AS unenrolled_students,
        (SELECT count(*) FROM classes c WHERE c.archived_at IS NULL AND NOT EXISTS (
-          SELECT 1 FROM class_teachers ct WHERE ct.class_id = c.id AND ct.starts_on <= current_date AND (ct.ends_on IS NULL OR ct.ends_on >= current_date)))::int AS classes_without_class_teacher,
+          SELECT 1 FROM class_teachers ct WHERE ct.class_id = c.id AND ct.starts_on <= school_today() AND (ct.ends_on IS NULL OR ct.ends_on >= school_today())))::int AS classes_without_class_teacher,
        (SELECT count(*) FROM users u WHERE u.is_active AND u.created_at < now() - interval '7 days'
           AND u.last_login_at IS NULL)::int AS never_signed_in,
        (SELECT count(*) FROM parents p JOIN users u ON u.id = p.user_id WHERE u.is_active AND NOT EXISTS (
-          SELECT 1 FROM parent_student ps WHERE ps.parent_id = p.id AND ps.valid_from <= current_date AND (ps.valid_to IS NULL OR ps.valid_to >= current_date)))::int AS parents_without_children,
+          SELECT 1 FROM parent_student ps WHERE ps.parent_id = p.id AND ps.valid_from <= school_today() AND (ps.valid_to IS NULL OR ps.valid_to >= school_today())))::int AS parents_without_children,
        (SELECT count(*) FROM teachers t JOIN users u ON u.id = t.user_id WHERE u.is_active AND NOT EXISTS (
-          SELECT 1 FROM teaching_assignments ta WHERE ta.teacher_id = t.id AND ta.starts_on <= current_date AND (ta.ends_on IS NULL OR ta.ends_on >= current_date)))::int AS teachers_without_assignments,
-       (SELECT count(*) FROM lessons l WHERE l.lesson_date < current_date AND l.status = 'planned')::int AS unmarked_past_lessons
+          SELECT 1 FROM teaching_assignments ta WHERE ta.teacher_id = t.id AND ta.starts_on <= school_today() AND (ta.ends_on IS NULL OR ta.ends_on >= school_today())))::int AS teachers_without_assignments,
+       (SELECT count(*) FROM lessons l WHERE l.lesson_date < school_today() AND l.status = 'planned')::int AS unmarked_past_lessons
 `
 
 type SchoolAlertCountsRow struct {
@@ -641,8 +641,8 @@ func (q *Queries) StudentWeeklyDynamics(ctx context.Context, arg StudentWeeklyDy
 
 const teacherClassStats = `-- name: TeacherClassStats :many
 SELECT c.id AS class_id, c.name AS class_name, s.id AS subject_id, s.name AS subject_name,
-       (SELECT count(*) FROM enrollments e WHERE e.class_id = c.id AND e.starts_on <= current_date
-         AND (e.ends_on IS NULL OR e.ends_on >= current_date))::int AS students,
+       (SELECT count(*) FROM enrollments e WHERE e.class_id = c.id AND e.starts_on <= school_today()
+         AND (e.ends_on IS NULL OR e.ends_on >= school_today()))::int AS students,
        COALESCE((SELECT sum(g.value * lw.weight) / NULLIF(sum(lw.weight), 0)
           FROM grades g JOIN lesson_works lw ON lw.id = g.lesson_work_id JOIN lessons l ON l.id = lw.lesson_id
          WHERE l.teacher_id = ta.teacher_id AND l.class_id = c.id AND l.subject_id = s.id
@@ -655,7 +655,7 @@ FROM teaching_assignments ta
 JOIN classes c ON c.id = ta.class_id AND c.archived_at IS NULL
 JOIN subjects s ON s.id = ta.subject_id
 WHERE ta.teacher_id = $1 AND ta.academic_period_id = $2
-  AND ta.starts_on <= current_date AND (ta.ends_on IS NULL OR ta.ends_on >= current_date)
+  AND ta.starts_on <= school_today() AND (ta.ends_on IS NULL OR ta.ends_on >= school_today())
 ORDER BY c.name, s.name
 `
 

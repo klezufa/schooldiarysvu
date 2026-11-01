@@ -355,7 +355,7 @@ FROM parent_student ps
 JOIN parents p ON p.id = ps.parent_id
 JOIN students s ON s.id = ps.student_id
 JOIN users u ON u.id = s.user_id
-WHERE p.user_id = $1 AND ps.valid_from <= current_date AND (ps.valid_to IS NULL OR ps.valid_to >= current_date)
+WHERE p.user_id = $1 AND ps.valid_from <= school_today() AND (ps.valid_to IS NULL OR ps.valid_to >= school_today())
 ORDER BY u.display_name
 `
 

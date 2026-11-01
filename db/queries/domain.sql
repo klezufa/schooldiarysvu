@@ -68,12 +68,12 @@ AND (NOT EXISTS (SELECT 1 FROM homework_recipients all_hr WHERE all_hr.homework_
 -- name: AnnouncementNotificationRecipients :many
 SELECT DISTINCT recipient.id FROM announcements a
 JOIN announcement_audiences aa ON aa.announcement_id = a.id
-LEFT JOIN enrollments e ON e.class_id = aa.class_id AND e.starts_on <= current_date AND (e.ends_on IS NULL OR e.ends_on >= current_date)
-LEFT JOIN lessons l ON l.subject_id = aa.subject_id AND l.lesson_date <= current_date
+LEFT JOIN enrollments e ON e.class_id = aa.class_id AND e.starts_on <= school_today() AND (e.ends_on IS NULL OR e.ends_on >= school_today())
+LEFT JOIN lessons l ON l.subject_id = aa.subject_id AND l.lesson_date <= school_today()
 LEFT JOIN enrollments se ON se.class_id = l.class_id AND se.starts_on <= l.lesson_date AND (se.ends_on IS NULL OR se.ends_on >= l.lesson_date)
 LEFT JOIN students s ON s.id = COALESCE(e.student_id, se.student_id)
 LEFT JOIN users su ON su.id = s.user_id AND su.is_active
-LEFT JOIN parent_student ps ON ps.student_id = s.id AND ps.valid_from <= current_date AND (ps.valid_to IS NULL OR ps.valid_to >= current_date)
+LEFT JOIN parent_student ps ON ps.student_id = s.id AND ps.valid_from <= school_today() AND (ps.valid_to IS NULL OR ps.valid_to >= school_today())
 LEFT JOIN parents p ON p.id = ps.parent_id LEFT JOIN users pu ON pu.id = p.user_id AND pu.is_active
 JOIN users recipient ON recipient.id IN (su.id, pu.id)
 LEFT JOIN notification_preferences np ON np.user_id = recipient.id
@@ -83,7 +83,7 @@ AND (aa.audience_type <> 'school' OR s.id IS NOT NULL);
 -- name: ListTeacherAnnouncements :many
 SELECT DISTINCT a.id, a.title, a.body, a.published_at FROM announcements a
 LEFT JOIN announcement_audiences aa ON aa.announcement_id = a.id
-LEFT JOIN teaching_assignments ta ON ta.teacher_id = $1 AND ta.starts_on <= current_date AND (ta.ends_on IS NULL OR ta.ends_on >= current_date)
+LEFT JOIN teaching_assignments ta ON ta.teacher_id = $1 AND ta.starts_on <= school_today() AND (ta.ends_on IS NULL OR ta.ends_on >= school_today())
  AND (ta.class_id = aa.class_id OR ta.subject_id = aa.subject_id)
 WHERE a.archived_at IS NULL AND (aa.audience_type = 'school' OR a.author_id = $2 OR ta.id IS NOT NULL)
 ORDER BY a.published_at DESC LIMIT 50;

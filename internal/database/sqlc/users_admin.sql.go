@@ -501,13 +501,13 @@ LEFT JOIN students st ON st.user_id = u.id
 LEFT JOIN teachers t ON t.user_id = u.id
 LEFT JOIN parents p ON p.user_id = u.id
 LEFT JOIN LATERAL (SELECT c.name FROM enrollments e JOIN classes c ON c.id = e.class_id
-  WHERE e.student_id = st.id AND e.starts_on <= current_date AND (e.ends_on IS NULL OR e.ends_on >= current_date)
+  WHERE e.student_id = st.id AND e.starts_on <= school_today() AND (e.ends_on IS NULL OR e.ends_on >= school_today())
   ORDER BY e.starts_on DESC LIMIT 1) cl ON true
 WHERE ($1::text = '' OR ru_lower(u.display_name) LIKE '%' || $1 || '%' ESCAPE '\' OR u.login LIKE '%' || $1 || '%' ESCAPE '\')
   AND ($2::text = '' OR EXISTS (SELECT 1 FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = u.id AND r.code = $2))
   AND ($3::text = 'all' OR ($3 = 'active' AND u.is_active) OR ($3 = 'inactive' AND NOT u.is_active))
   AND ($4::uuid IS NULL OR EXISTS (SELECT 1 FROM enrollments e WHERE e.student_id = st.id AND e.class_id = $4
-        AND e.starts_on <= current_date AND (e.ends_on IS NULL OR e.ends_on >= current_date)))
+        AND e.starts_on <= school_today() AND (e.ends_on IS NULL OR e.ends_on >= school_today())))
 ORDER BY u.display_name, u.id
 LIMIT $6 OFFSET $5
 `
@@ -592,7 +592,7 @@ const unenrolledStudents = `-- name: UnenrolledStudents :many
 SELECT st.id AS student_id, u.display_name
 FROM students st JOIN users u ON u.id = st.user_id
 WHERE u.is_active AND NOT EXISTS (SELECT 1 FROM enrollments e WHERE e.student_id = st.id
-  AND e.starts_on <= current_date AND (e.ends_on IS NULL OR e.ends_on >= current_date))
+  AND e.starts_on <= school_today() AND (e.ends_on IS NULL OR e.ends_on >= school_today()))
 ORDER BY u.display_name
 `
 
