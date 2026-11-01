@@ -240,7 +240,8 @@ const pagesByRole: Record<string, { login: string; paths: string[] }> = {
   teacher: { login: 'demo-teacher1', paths: ['/today', '/schedule', '/journal', '/homework', '/announcements', '/reports', '/my-class', '/settings'] },
   student: { login: 'demo-student1', paths: ['/today', '/schedule', '/homework', '/grades', '/announcements', '/settings'] },
   parent: { login: 'demo-parent1', paths: ['/today', '/schedule', '/homework', '/grades', '/announcements'] },
-  admin: { login: 'demo-admin', paths: ['/today', '/schedule', '/admin?tab=people', '/admin?tab=import', '/admin?tab=invitations', '/admin?tab=enrollment', '/admin?tab=assignments', '/admin?tab=schedule', '/admin?tab=structure', '/admin?tab=audit'] },
+  admin: { login: 'demo-admin', paths: ['/today', '/schedule', '/admin', '/admin?view=students', '/admin?view=teachers', '/admin?view=classes',
+    '/admin?view=schedule', '/admin?view=subjects', '/admin?view=passwords', '/admin?tab=people', '/admin?tab=import', '/admin?tab=invitations', '/admin?tab=enrollment', '/admin?tab=assignments', '/admin?tab=schedule', '/admin?tab=structure', '/admin?tab=audit'] },
   sysadmin: { login: 'demo-sysadmin', paths: ['/today', '/system', '/admin?tab=structure'] },
 }
 
@@ -398,6 +399,119 @@ test('administrator creates, renames and archives a room in the structure sectio
   page.once('dialog', (dialog) => void dialog.accept())
   await renamed.getByRole('button', { name: 'Архивировать' }).click()
   await expect(renamed).toHaveCount(0)
+})
+
+/** Первый вход с временным паролем, выданным администратором: дневник требует сразу придумать свой. */
+async function firstSignIn(page: Page, loginName: string, temporary: string, ownPassword: string): Promise<void> {
+  await page.goto('/login')
+  await page.getByLabel('Логин', { exact: true }).fill(loginName)
+  await page.getByLabel('Пароль', { exact: true }).fill(temporary)
+  await page.getByRole('button', { name: 'Войти', exact: true }).click()
+  await page.waitForURL(/\/password$/)
+  await page.getByLabel('Текущий пароль').fill(temporary)
+  await page.getByLabel('Новый пароль', { exact: true }).fill(ownPassword)
+  await page.getByLabel('Повторите новый пароль').fill(ownPassword)
+  await page.getByRole('button', { name: 'Сохранить пароль' }).click()
+  await page.waitForURL(/\/today$/)
+}
+
+function isoDay(offset: number): string {
+  const date = new Date()
+  date.setDate(date.getDate() + offset)
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+test('simple mode: an administrator prepares a class from scratch, the new teacher and parent see the result', async ({ page, browser }) => {
+  test.setTimeout(120_000)
+  await login(page, 'demo-admin', 'admin')
+  await page.goto('/admin')
+  await expect(page.getByRole('heading', { name: 'Подготовка школы' })).toBeVisible()
+  const tiles = page.getByRole('navigation', { name: 'Задачи администратора' })
+
+  // Предмет из типового списка.
+  await tiles.getByRole('button', { name: /Предметы и кабинеты/ }).click()
+  await page.getByText('Выбрать из типового списка').click()
+  await page.getByRole('checkbox', { name: 'Физика' }).check()
+  await page.getByRole('button', { name: 'Добавить отмеченные (1)' }).click()
+  await expect(page.locator('.tag-list li').filter({ hasText: 'Физика' })).toBeVisible()
+  await page.getByRole('button', { name: 'К списку задач' }).click()
+
+  // Класс: после создания сразу открывается его карточка.
+  const stamp = Date.now().toString(36).slice(-4)
+  const className = `7Е-${stamp}`
+  await tiles.getByRole('button', { name: /Классы/ }).click()
+  await page.getByRole('button', { name: 'Создать класс' }).click()
+  await page.getByLabel('Название класса *').fill(className)
+  await page.getByRole('dialog').getByRole('button', { name: 'Создать класс' }).click()
+  await expect(page.getByRole('heading', { name: `${className} класс` })).toBeVisible()
+  await page.getByRole('button', { name: 'К списку классов' }).click()
+  await page.getByRole('button', { name: 'К списку задач' }).click()
+
+  // Учитель сразу с нагрузкой и классным руководством; логин подбирается из ФИО.
+  await tiles.getByRole('button', { name: /Учителя/ }).click()
+  await page.getByRole('button', { name: 'Добавить учителя' }).click()
+  const teacherDialog = page.getByRole('dialog')
+  await teacherDialog.getByLabel('Фамилия, имя, отчество *').fill(`Ершова${stamp} Елена Викторовна`)
+  await teacherDialog.getByLabel('Классный руководитель').selectOption({ label: className })
+  await teacherDialog.getByLabel('Предмет').selectOption({ label: 'Физика' })
+  await teacherDialog.getByLabel('Класс', { exact: true }).selectOption({ label: className })
+  await teacherDialog.getByRole('button', { name: 'Сохранить' }).click()
+  const credentials = page.getByRole('dialog', { name: 'Данные для входа' })
+  await expect(credentials).toBeVisible()
+  const teacherLogin = (await credentials.getByTestId('credential-login').first().textContent())!.trim()
+  const teacherPassword = (await credentials.getByTestId('credential-password').first().textContent())!.trim()
+  expect(teacherLogin).toMatch(/^ershova.+\.ev\d*$/)
+  await credentials.getByRole('button', { name: 'Готово' }).click()
+  await expect(page.locator('.simple-list li').filter({ hasText: `Ершова${stamp}` })).toContainText(`Физика (${className})`)
+  await page.getByRole('button', { name: 'К списку задач' }).click()
+
+  // Ученик вместе с новым родителем: два логина в одном окне.
+  await tiles.getByRole('button', { name: /Ученики и родители/ }).click()
+  await page.getByRole('button', { name: 'Добавить ученика' }).click()
+  const studentDialog = page.getByRole('dialog')
+  await studentDialog.getByLabel('Фамилия, имя, отчество ученика *').fill(`Ершов${stamp} Егор Ильич`)
+  await studentDialog.getByLabel('Класс *').selectOption({ label: className })
+  await studentDialog.getByLabel('Фамилия, имя, отчество родителя *').fill(`Ершов${stamp} Илья Петрович`)
+  await studentDialog.getByRole('button', { name: 'Сохранить' }).click()
+  await expect(credentials.getByTestId('credential-login')).toHaveCount(2)
+  const parentLogin = (await credentials.getByTestId('credential-login').nth(1).textContent())!.trim()
+  const parentPassword = (await credentials.getByTestId('credential-password').nth(1).textContent())!.trim()
+  await credentials.getByRole('button', { name: 'Готово' }).click()
+  await expect(page.locator('.simple-list li').filter({ hasText: `Ершов${stamp} Егор` })).toContainText(`${className} класс`)
+  await page.getByRole('button', { name: 'К списку задач' }).click()
+
+  // Урок в сетку: учитель предлагается первым, уроки создаются сразу — без отдельного шага.
+  await tiles.getByRole('button', { name: /Расписание/ }).click()
+  await page.getByRole('combobox', { name: 'Класс' }).selectOption({ label: className })
+  await page.getByRole('button', { name: 'Поставить урок: Ср, 6-й урок' }).click()
+  const lessonDialog = page.getByRole('dialog')
+  await lessonDialog.getByLabel('Предмет *').selectOption({ label: 'Физика' })
+  await expect(lessonDialog.getByLabel('Учитель *')).toHaveValue(/.+/)
+  await lessonDialog.getByRole('button', { name: 'Сохранить' }).click()
+  await expect(page.locator('.entry-chip').filter({ hasText: 'Физика' })).toBeVisible()
+
+  // Режим запоминается: расширенный показывает вкладки и после перезагрузки.
+  await page.getByRole('button', { name: 'Расширенный режим' }).click()
+  await expect(page.getByRole('tab', { name: 'Пользователи' })).toBeVisible()
+  await page.goto('/admin')
+  await expect(page.getByRole('tab', { name: 'Пользователи' })).toBeVisible()
+  await page.getByRole('button', { name: 'Простой режим' }).click()
+  await expect(page.getByRole('heading', { name: 'Подготовка школы' })).toBeVisible()
+
+  const ownPassword = `${initialPassword}-own-simple`
+  const teacherContext = await browser.newContext({ baseURL: process.env.E2E_BASE_URL ?? 'http://127.0.0.1:5173' })
+  const teacher = await teacherContext.newPage()
+  await firstSignIn(teacher, teacherLogin, teacherPassword, ownPassword)
+  await expect(teacher.getByRole('link', { name: 'Мой класс' })).toBeVisible()
+  const lessons = await (await teacher.request.get(`/api/v1/schedule?from=${isoDay(0)}&to=${isoDay(13)}`)).json() as { subject_name?: string; class_name?: string }[]
+  expect(lessons.some((lesson) => lesson.subject_name === 'Физика' && lesson.class_name === className)).toBe(true)
+  await teacherContext.close()
+
+  const parentContext = await browser.newContext({ baseURL: process.env.E2E_BASE_URL ?? 'http://127.0.0.1:5173' })
+  const parent = await parentContext.newPage()
+  await firstSignIn(parent, parentLogin, parentPassword, ownPassword)
+  await expect(parent.getByRole('combobox', { name: 'Ребёнок' })).toContainText(`Ершов${stamp} Егор`)
+  await parentContext.close()
 })
 
 // Последним: перенос меняет данные II четверти. В новой четверти нет назначений, и предмет в шаблоне выбрать нельзя,

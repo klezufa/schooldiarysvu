@@ -18,6 +18,9 @@ import { EnrollmentAdmin } from './admin/Enrollment'
 import { ScheduleAdmin } from './admin/ScheduleAdmin'
 import { TeachingAssignmentsPanel } from './admin/TeachingAssignments'
 import { options, useDirectory, useIsSystemAdmin, usePeople } from './admin/helpers'
+import { useAdminMode, type AdminMode } from './admin/mode'
+import { SimpleAdmin } from './admin/simple/SimpleAdmin'
+import type { SimpleView } from './admin/simple/setup'
 
 type EntityRow = { id: string; [key: string]: unknown }
 
@@ -263,15 +266,9 @@ function AuditAdmin(): React.JSX.Element {
   )
 }
 
-export function AdminPage(): React.JSX.Element {
-  const [params, setParams] = useSearchParams()
-  const requested = params.get('tab')
-  const tab: Tab = tabs.some((item) => item.id === requested) ? (requested as Tab) : 'people'
-  const select = (next: Tab) => setParams({ tab: next }, { replace: true })
+function AdvancedAdmin({ tab, select, startWithCreate }: { tab: Tab; select: (tab: Tab) => void; startWithCreate: boolean }): React.JSX.Element {
   return (
-    <div>
-      <PageHeader eyebrow="Управление школой" title="Администрирование" description="Пользователи и роли, зачисление, назначения, расписание и учебная структура." />
-      <InsecureConnectionNotice />
+    <>
       <div className="tabs admin-tabs" role="tablist" aria-label="Разделы администрирования">
         {tabs.map(({ id, label, icon: Icon }) => (
           <button role="tab" id={`tab-${id}`} aria-selected={tab === id} aria-controls="admin-panel" className={tab === id ? 'active' : ''} key={id} onClick={() => select(id)}>
@@ -280,7 +277,7 @@ export function AdminPage(): React.JSX.Element {
         ))}
       </div>
       <div role="tabpanel" id="admin-panel" aria-labelledby={`tab-${tab}`}>
-        {tab === 'people' && <PeopleAdmin startWithCreate={params.get('new') === '1'} />}
+        {tab === 'people' && <PeopleAdmin startWithCreate={startWithCreate} />}
         {tab === 'import' && <ImportAdmin />}
         {tab === 'invitations' && <InvitationsAdmin />}
         {tab === 'enrollment' && <EnrollmentAdmin />}
@@ -289,6 +286,41 @@ export function AdminPage(): React.JSX.Element {
         {tab === 'structure' && <StructureAdmin />}
         {tab === 'audit' && <AuditAdmin />}
       </div>
+    </>
+  )
+}
+
+const simpleViews: SimpleView[] = ['students', 'teachers', 'classes', 'class', 'schedule', 'passwords', 'subjects']
+
+export function AdminPage(): React.JSX.Element {
+  const [params, setParams] = useSearchParams()
+  const [mode, setMode] = useAdminMode()
+  const requested = params.get('tab')
+  // Ссылка на конкретную вкладку (с главной панели, из подсказок) открывает расширенный режим, не меняя выбор.
+  const advanced = mode === 'advanced' || Boolean(requested)
+  const tab: Tab = tabs.some((item) => item.id === requested) ? (requested as Tab) : 'people'
+  const select = (next: Tab) => setParams({ tab: next }, { replace: true })
+  const requestedView = params.get('view') as SimpleView | null
+  const view: SimpleView = requestedView && simpleViews.includes(requestedView) ? requestedView : ''
+  const go = (next: SimpleView, classId?: string) => {
+    setParams(next ? { view: next, ...(classId ? { class: classId } : {}) } : {})
+    window.scrollTo({ top: 0 })
+  }
+  const switchMode = (next: AdminMode) => { setMode(next); setParams(next === 'advanced' ? { tab } : {}, { replace: true }) }
+  return (
+    <div>
+      <PageHeader eyebrow="Управление школой" title="Администрирование"
+        description={advanced ? 'Пользователи и роли, зачисление, назначения, расписание и учебная структура.' : 'Частые задачи — по шагам, без лишних настроек.'}
+        actions={
+          <div className="segmented mode-switch" role="group" aria-label="Режим администрирования">
+            <button type="button" aria-pressed={!advanced} className={advanced ? '' : 'active'} onClick={() => switchMode('simple')}>Простой режим</button>
+            <button type="button" aria-pressed={advanced} className={advanced ? 'active' : ''} onClick={() => switchMode('advanced')}>Расширенный режим</button>
+          </div>
+        } />
+      <InsecureConnectionNotice />
+      {advanced
+        ? <AdvancedAdmin tab={tab} select={select} startWithCreate={params.get('new') === '1'} />
+        : <SimpleAdmin view={view} classId={params.get('class') ?? undefined} go={go} openAdvanced={(next) => setParams({ tab: next })} />}
     </div>
   )
 }

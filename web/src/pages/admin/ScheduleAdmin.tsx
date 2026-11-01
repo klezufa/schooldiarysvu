@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { CalendarPlus, CopyPlus, Plus, Trash2, Wand2 } from 'lucide-react'
+import { CalendarPlus, Plus, Trash2, Wand2 } from 'lucide-react'
 import { api, mutation, queryString } from '../../api/client'
-import type { AcademicPeriod, Assignment, CarryOverResult, GenerateLessonsResult, NamedEntity, ScheduleEntry } from '../../api/types'
+import type { AcademicPeriod, Assignment, GenerateLessonsResult, ScheduleEntry } from '../../api/types'
 import { dateISO } from '../../lib/dates'
 import { defaultDateIn, previousPeriod } from '../../lib/academicYears'
 import { subjectStyle } from '../../lib/subjects'
@@ -10,13 +10,8 @@ import { useToast } from '../../components/toastContext'
 import { Field, Modal, QueryState } from '../../components/UI'
 import { options, useDirectory } from './helpers'
 import { PeriodSelect } from './shared'
-
-const weekdays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
-/** Типовое расписание звонков: подставляется по номеру урока, можно изменить. */
-const bells: [string, string][] = [
-  ['08:30', '09:15'], ['09:25', '10:10'], ['10:30', '11:15'], ['11:35', '12:20'],
-  ['12:30', '13:15'], ['13:25', '14:10'], ['14:20', '15:05'], ['15:15', '16:00'],
-]
+import { CarryOverNotice } from './scheduleShared'
+import { bells, weekdays } from './scheduleSlots'
 
 type Draft = {
   id?: string; subject_id: string; teacher_id: string; room_id: string; weekday: number; lesson_number: number
@@ -24,68 +19,6 @@ type Draft = {
 }
 
 const assignmentsQuery = { queryKey: ['teaching-assignments'], queryFn: () => api<Assignment[]>('/teaching-assignments') }
-
-/**
- * Назначения учителей и шаблон расписания действуют в пределах учебного периода. В новой четверти их нет, и выбрать
- * предмет в шаблоне нельзя — предлагаем перенести всё из предыдущего периода одной кнопкой (повторы сервер пропускает).
- * Если предыдущий период — из прошлого учебного года, классы там другие (5А прошлого года → 6А нового): администратор
- * выбирает, из какого класса переносить.
- */
-function CarryOverNotice({ period, previous, classId, className, hasAssignments, sourceClasses, onDone }: {
-  period: AcademicPeriod; previous: AcademicPeriod; classId: string; className: string; hasAssignments: boolean
-  sourceClasses: NamedEntity[]; onDone: () => Promise<void>
-}): React.JSX.Element {
-  const { showToast } = useToast()
-  const crossYear = previous.academic_year_id !== period.academic_year_id
-  const [allClasses, setAllClasses] = useState(false)
-  const [sourceClass, setSourceClass] = useState('')
-  const [pending, setPending] = useState(false)
-  useEffect(() => {
-    if (crossYear && !sourceClasses.some((item) => item.id === sourceClass)) {
-      setSourceClass((sourceClasses.find((item) => item.name === className) ?? sourceClasses[0])?.id ?? '')
-    }
-  }, [crossYear, sourceClasses, sourceClass, className])
-  const missing = !hasAssignments ? 'нет назначений учителей — поэтому в шаблоне нельзя выбрать предмет' : 'пустой шаблон расписания'
-  const carryOver = async () => {
-    setPending(true)
-    try {
-      const body = crossYear
-        ? { from_period_id: previous.id, class_id: sourceClass, target_class_id: classId }
-        : { from_period_id: previous.id, class_id: allClasses ? undefined : classId }
-      const result = await mutation<CarryOverResult>(`/academic-periods/${period.id}/carry-over`, 'POST', body)
-      const skipped = result.assignments_skipped + result.entries_skipped
-      showToast(`Перенесено назначений: ${result.assignments_created}, уроков шаблона: ${result.entries_created}`
-        + (skipped ? `. Пропущено ${skipped}: уже есть, слот занят или учитель неактивен` : ''))
-      await onDone()
-    } catch (caught) {
-      showToast(caught instanceof Error ? caught.message : 'Не удалось перенести', 'error')
-    } finally {
-      setPending(false)
-    }
-  }
-  return (
-    <div className="notice info period-hint carry-over" role="status">
-      <CopyPlus aria-hidden="true" />
-      <span>
-        <strong>В периоде «{period.name}» у класса {className} {missing}.</strong> Назначения и шаблон действуют в пределах периода —
-        {crossYear
-          ? <> это новый учебный год: выберите класс прошлого года, чьи учителя и шаблон достанутся {className}.</>
-          : <> перенесите их из «{previous.name}».</>}
-        {' '}Уже существующие назначения и занятые слоты не изменятся.
-      </span>
-      {crossYear ? (
-        <label className="checkbox-label">Из класса
-          <select aria-label="Класс прошлого года" value={sourceClass} onChange={(event) => setSourceClass(event.target.value)}>
-            {sourceClasses.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-          </select>
-        </label>
-      ) : (
-        <label className="checkbox-label"><input type="checkbox" checked={allClasses} onChange={(event) => setAllClasses(event.target.checked)} />Для всех классов</label>
-      )}
-      <button type="button" className="button small primary" disabled={pending || (crossYear && !sourceClass)} onClick={carryOver}>{pending ? 'Переносим…' : `Перенести из «${previous.name}»`}</button>
-    </div>
-  )
-}
 
 function EntryDialog({ draft, classId, periodId, periodStart, periodEnd, onClose, onSaved }: {
   draft: Draft | null; classId: string; periodId: string; periodStart: string; periodEnd: string; onClose: () => void; onSaved: (message: string) => void
@@ -124,7 +57,7 @@ function EntryDialog({ draft, classId, periodId, periodStart, periodEnd, onClose
     }
   }
   const remove = async () => {
-    if (!value?.id || !window.confirm('Удалить урок из шаблона? Уже созданные уроки с оценками останутся.')) return
+    if (!value?.id || !window.confirm('Удалить урок из шаблона? Будущие незаполненные уроки по этой строке исчезнут из расписания; проведённые уроки и уроки с оценками, посещаемостью или темой останутся.')) return
     try {
       await mutation(`/schedule-entries/${value.id}`, 'DELETE')
       onSaved('Строка удалена из шаблона')
@@ -133,7 +66,7 @@ function EntryDialog({ draft, classId, periodId, periodStart, periodEnd, onClose
     }
   }
   return (
-    <Modal open={Boolean(draft)} onOpenChange={(open) => { if (!open) onClose() }} title={value?.id ? 'Урок в шаблоне' : 'Добавить урок в шаблон'} description="Шаблон повторяется каждую неделю (или через неделю) в пределах срока действия." wide>
+    <Modal open={Boolean(draft)} onOpenChange={(open) => { if (!open) onClose() }} title={value?.id ? 'Урок в шаблоне' : 'Добавить урок в шаблон'} description="Шаблон повторяется каждую неделю (или через неделю) в пределах срока действия. После изменения уже созданные будущие уроки без оценок и темы пересоздаются по новым данным." wide>
       {value && (
         <form className="admin-form" onSubmit={save}>
           <Field label="Предмет *" htmlFor="entry-subject" hint={value.id ? 'Предмет строки не меняется — удалите её и создайте новую' : subjectIds.size ? 'Только предметы, на которые классу назначен учитель в этом периоде'
