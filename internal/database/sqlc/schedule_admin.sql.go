@@ -22,6 +22,38 @@ func (q *Queries) DeleteScheduleEntry(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const deleteUntouchedFutureLessons = `-- name: DeleteUntouchedFutureLessons :many
+DELETE FROM lessons l
+WHERE l.schedule_entry_id = $1 AND l.lesson_date >= school_today()
+  AND l.status = 'planned' AND l.topic = ''
+  AND NOT EXISTS (SELECT 1 FROM lesson_works w WHERE w.lesson_id = l.id)
+  AND NOT EXISTS (SELECT 1 FROM attendance a WHERE a.lesson_id = l.id)
+  AND NOT EXISTS (SELECT 1 FROM homework h WHERE h.lesson_id = l.id)
+RETURNING l.lesson_date
+`
+
+// Будущие уроки строки шаблона, в которых ещё ничего нет: без темы, работ, посещаемости и заданий. Их удаляют при
+// изменении или удалении строки, чтобы в расписании не оставались уроки по старому шаблону. Заполненные остаются.
+func (q *Queries) DeleteUntouchedFutureLessons(ctx context.Context, scheduleEntryID pgtype.UUID) ([]time.Time, error) {
+	rows, err := q.db.Query(ctx, deleteUntouchedFutureLessons, scheduleEntryID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []time.Time{}
+	for rows.Next() {
+		var lesson_date time.Time
+		if err := rows.Scan(&lesson_date); err != nil {
+			return nil, err
+		}
+		items = append(items, lesson_date)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getScheduleEntry = `-- name: GetScheduleEntry :one
 SELECT id, class_id, subject_id, teacher_id, room_id, academic_period_id, weekday, lesson_number,
        starts_at, ends_at, valid_from, valid_to, week_parity

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
@@ -65,6 +66,9 @@ type Querier interface {
 	DeleteExpiredSessions(ctx context.Context) error
 	DeleteExpiredSessionsNow(ctx context.Context) error
 	DeleteScheduleEntry(ctx context.Context, id uuid.UUID) error
+	// Будущие уроки строки шаблона, в которых ещё ничего нет: без темы, работ, посещаемости и заданий. Их удаляют при
+	// изменении или удалении строки, чтобы в расписании не оставались уроки по старому шаблону. Заполненные остаются.
+	DeleteUntouchedFutureLessons(ctx context.Context, scheduleEntryID pgtype.UUID) ([]time.Time, error)
 	EndEnrollment(ctx context.Context, arg EndEnrollmentParams) error
 	EnrollmentOverlaps(ctx context.Context, arg EnrollmentOverlapsParams) (bool, error)
 	EnrollmentOverlapsExcept(ctx context.Context, arg EnrollmentOverlapsExceptParams) (bool, error)

@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -98,7 +100,10 @@ func (s *Service) UpdateScheduleEntry(ctx context.Context, actor Principal, id u
 		}
 		oldValues, _ := json.Marshal(old)
 		newValues, _ := json.Marshal(input)
-		return audit(ctx, q, actor, "schedule_entry.updated", "schedule_entry", id, oldValues, newValues)
+		if err := audit(ctx, q, actor, "schedule_entry.updated", "schedule_entry", id, oldValues, newValues); err != nil {
+			return err
+		}
+		return s.resyncFutureLessons(ctx, q, actor, id, old.ClassID, true)
 	})
 	if err != nil {
 		return api.ScheduleEntry{}, err
@@ -127,7 +132,7 @@ func (s *Service) scheduleEntryByID(ctx context.Context, id uuid.UUID) (api.Sche
 	return api.ScheduleEntry{}, apperr.NotFound()
 }
 
-// DeleteScheduleEntry удаляет строку шаблона; уже созданные по ней уроки (с оценками и посещаемостью) остаются.
+// DeleteScheduleEntry удаляет строку шаблона и её будущие незаполненные уроки; проведённые и заполненные уроки остаются.
 func (s *Service) DeleteScheduleEntry(ctx context.Context, actor Principal, id uuid.UUID) error {
 	if err := actor.requireAdministrator(); err != nil {
 		return err
@@ -139,6 +144,10 @@ func (s *Service) DeleteScheduleEntry(ctx context.Context, actor Principal, id u
 		old, err := q.GetScheduleEntry(ctx, id)
 		if err != nil {
 			return mapDatabaseError(err)
+		}
+		// До удаления строки: потом её уроки потеряют ссылку на шаблон (ON DELETE SET NULL).
+		if err := s.resyncFutureLessons(ctx, q, actor, id, old.ClassID, false); err != nil {
+			return err
 		}
 		if err := q.DeleteScheduleEntry(ctx, id); err != nil {
 			return mapDatabaseError(err)
@@ -340,7 +349,6 @@ func (s *Service) GenerateLessons(ctx context.Context, actor Principal, input ap
 	}
 	var result api.GenerateLessonsResult
 	err = s.transactionReadCommitted(ctx, func(tx pgx.Tx, q *db.Queries) error {
-		result = api.GenerateLessonsResult{}
 		if err := lockLessonSchedule(ctx, tx); err != nil {
 			return err
 		}
@@ -348,74 +356,126 @@ func (s *Service) GenerateLessons(ctx context.Context, actor Principal, input ap
 		if err != nil {
 			return err
 		}
-		existingRows, err := q.ListGeneratedLessonDates(ctx, db.ListGeneratedLessonDatesParams{FromDate: from, ToDate: to})
+		result, err = generateLessonsFromEntries(ctx, q, actor, entries, from, to, skip, location)
 		if err != nil {
 			return err
-		}
-		existing := make(map[string]bool, len(existingRows))
-		for _, row := range existingRows {
-			existing[uuid.UUID(row.ScheduleEntryID.Bytes).String()+row.LessonDate.Format("2006-01-02")] = true
-		}
-		periods := map[uuid.UUID]db.GetAcademicPeriodRow{}
-		for day := from; !day.After(to); day = day.AddDate(0, 0, 1) {
-			if skip[day.Format("2006-01-02")] {
-				continue
-			}
-			isoWeekday := int16(day.Weekday())
-			if isoWeekday == 0 {
-				isoWeekday = 7
-			}
-			_, isoWeek := day.ISOWeek()
-			for _, entry := range entries {
-				if entry.Weekday != isoWeekday || day.Before(entry.ValidFrom) || (entry.ValidTo.Valid && day.After(entry.ValidTo.Time)) {
-					continue
-				}
-				if entry.WeekParity == 1 && isoWeek%2 == 0 || entry.WeekParity == 2 && isoWeek%2 == 1 {
-					continue
-				}
-				period, known := periods[entry.AcademicPeriodID]
-				if !known {
-					period, err = q.GetAcademicPeriod(ctx, entry.AcademicPeriodID)
-					if err != nil {
-						return mapDatabaseError(err)
-					}
-					periods[entry.AcademicPeriodID] = period
-				}
-				if day.Before(period.StartsOn) || day.After(period.EndsOn) || period.Status == "closed" {
-					continue
-				}
-				if existing[entry.ID.String()+day.Format("2006-01-02")] {
-					result.Existing++
-					continue
-				}
-				// Учитель мог смениться: урок без действующего назначения учитель не сможет заполнить.
-				assigned, err := q.TeacherAssignmentExists(ctx, db.TeacherAssignmentExistsParams{TeacherID: entry.TeacherID, ClassID: entry.ClassID,
-					SubjectID: entry.SubjectID, AcademicPeriodID: entry.AcademicPeriodID, Column5: day})
-				if err != nil {
-					return err
-				}
-				if !assigned {
-					result.Conflicts++
-					continue
-				}
-				midnight := time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, location)
-				startsAt, endsAt := midnight.Add(clockToDuration(entry.StartsAt)), midnight.Add(clockToDuration(entry.EndsAt))
-				room := uuidPointer(entry.RoomID)
-				if err := checkLessonConflict(ctx, q, uuid.Nil, startsAt, endsAt, entry.ClassID, entry.TeacherID, room); err != nil {
-					result.Conflicts++
-					continue
-				}
-				if _, err := q.CreateLesson(ctx, db.CreateLessonParams{LessonDate: day, StartsAt: startsAt, EndsAt: endsAt, ClassID: entry.ClassID,
-					SubjectID: entry.SubjectID, TeacherID: entry.TeacherID, RoomID: entry.RoomID, AcademicPeriodID: entry.AcademicPeriodID,
-					ScheduleEntryID: nullableUUID(entry.ID), Topic: "", CreatedBy: nullableUUID(actor.UserID)}); err != nil {
-					return mapDatabaseError(err)
-				}
-				result.Created++
-			}
 		}
 		newValues, _ := json.Marshal(map[string]any{"from": from.Format("2006-01-02"), "to": to.Format("2006-01-02"), "class_id": input.ClassId,
 			"created": result.Created, "existing": result.Existing, "conflicts": result.Conflicts})
 		return audit(ctx, q, actor, "lessons.generated", "lesson_batch", uuid.New(), nil, newValues)
 	})
 	return result, err
+}
+
+// generateLessonsFromEntries создаёт уроки по строкам шаблона на даты from..to внутри транзакции с блокировкой расписания.
+func generateLessonsFromEntries(ctx context.Context, q *db.Queries, actor Principal, entries []db.ListScheduleEntriesAdminRow, from, to time.Time,
+	skip map[string]bool, location *time.Location) (api.GenerateLessonsResult, error) {
+	var result api.GenerateLessonsResult
+	existingRows, err := q.ListGeneratedLessonDates(ctx, db.ListGeneratedLessonDatesParams{FromDate: from, ToDate: to})
+	if err != nil {
+		return result, err
+	}
+	existing := make(map[string]bool, len(existingRows))
+	for _, row := range existingRows {
+		existing[uuid.UUID(row.ScheduleEntryID.Bytes).String()+row.LessonDate.Format("2006-01-02")] = true
+	}
+	periods := map[uuid.UUID]db.GetAcademicPeriodRow{}
+	for day := from; !day.After(to); day = day.AddDate(0, 0, 1) {
+		if skip[day.Format("2006-01-02")] {
+			continue
+		}
+		isoWeekday := int16(day.Weekday())
+		if isoWeekday == 0 {
+			isoWeekday = 7
+		}
+		_, isoWeek := day.ISOWeek()
+		for _, entry := range entries {
+			if entry.Weekday != isoWeekday || day.Before(entry.ValidFrom) || (entry.ValidTo.Valid && day.After(entry.ValidTo.Time)) {
+				continue
+			}
+			if entry.WeekParity == 1 && isoWeek%2 == 0 || entry.WeekParity == 2 && isoWeek%2 == 1 {
+				continue
+			}
+			period, known := periods[entry.AcademicPeriodID]
+			if !known {
+				period, err = q.GetAcademicPeriod(ctx, entry.AcademicPeriodID)
+				if err != nil {
+					return result, mapDatabaseError(err)
+				}
+				periods[entry.AcademicPeriodID] = period
+			}
+			if day.Before(period.StartsOn) || day.After(period.EndsOn) || period.Status == "closed" {
+				continue
+			}
+			if existing[entry.ID.String()+day.Format("2006-01-02")] {
+				result.Existing++
+				continue
+			}
+			// Учитель мог смениться: урок без действующего назначения учитель не сможет заполнить.
+			assigned, err := q.TeacherAssignmentExists(ctx, db.TeacherAssignmentExistsParams{TeacherID: entry.TeacherID, ClassID: entry.ClassID,
+				SubjectID: entry.SubjectID, AcademicPeriodID: entry.AcademicPeriodID, Column5: day})
+			if err != nil {
+				return result, err
+			}
+			if !assigned {
+				result.Conflicts++
+				continue
+			}
+			midnight := time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, location)
+			startsAt, endsAt := midnight.Add(clockToDuration(entry.StartsAt)), midnight.Add(clockToDuration(entry.EndsAt))
+			room := uuidPointer(entry.RoomID)
+			if err := checkLessonConflict(ctx, q, uuid.Nil, startsAt, endsAt, entry.ClassID, entry.TeacherID, room); err != nil {
+				result.Conflicts++
+				continue
+			}
+			if _, err := q.CreateLesson(ctx, db.CreateLessonParams{LessonDate: day, StartsAt: startsAt, EndsAt: endsAt, ClassID: entry.ClassID,
+				SubjectID: entry.SubjectID, TeacherID: entry.TeacherID, RoomID: entry.RoomID, AcademicPeriodID: entry.AcademicPeriodID,
+				ScheduleEntryID: nullableUUID(entry.ID), Topic: "", CreatedBy: nullableUUID(actor.UserID)}); err != nil {
+				return result, mapDatabaseError(err)
+			}
+			result.Created++
+		}
+	}
+	return result, nil
+}
+
+// resyncFutureLessons убирает будущие незаполненные уроки строки шаблона и, если строка осталась, создаёт их заново по её
+// новым данным на тот же горизонт: иначе после переноса урока в расписании остались бы уроки по старому шаблону.
+// Уроки с темой, работами, посещаемостью или заданиями не трогаются.
+func (s *Service) resyncFutureLessons(ctx context.Context, q *db.Queries, actor Principal, entryID, classID uuid.UUID, regenerate bool) error {
+	removed, err := q.DeleteUntouchedFutureLessons(ctx, nullableUUID(entryID))
+	if err != nil {
+		return mapDatabaseError(err)
+	}
+	if len(removed) == 0 {
+		return nil
+	}
+	var created api.GenerateLessonsResult
+	if regenerate {
+		settings, err := q.GetSchoolSettings(ctx)
+		if err != nil {
+			return mapDatabaseError(err)
+		}
+		location, err := time.LoadLocation(settings.Timezone)
+		if err != nil {
+			return fmt.Errorf("load school timezone: %w", err)
+		}
+		horizon := removed[0]
+		for _, day := range removed {
+			if day.After(horizon) {
+				horizon = day
+			}
+		}
+		rows, err := q.ListScheduleEntriesAdmin(ctx, db.ListScheduleEntriesAdminParams{ClassID: nullableUUID(classID), OnDate: time.Date(1, 1, 1, 0, 0, 0, 0, time.UTC)})
+		if err != nil {
+			return err
+		}
+		entries := slices.DeleteFunc(rows, func(row db.ListScheduleEntriesAdminRow) bool { return row.ID != entryID })
+		created, err = generateLessonsFromEntries(ctx, q, actor, entries, s.schoolToday(ctx), horizon, nil, location)
+		if err != nil {
+			return err
+		}
+	}
+	newValues, _ := json.Marshal(map[string]any{"removed": len(removed), "created": created.Created, "conflicts": created.Conflicts})
+	return audit(ctx, q, actor, "lessons.resynced", "schedule_entry", entryID, nil, newValues)
 }

@@ -437,6 +437,213 @@ func TestCarryOverAcademicPeriod(t *testing.T) {
 	admin.request(http.MethodPost, path, request, http.StatusUnprocessableEntity)
 }
 
+// Справочники и связи, которыми администратор пользуется каждый день: предметы, кабинеты, переименование класса и
+// периода, состав класса на дату, связь родителя с ребёнком и её завершение, завершение назначения учителя.
+func TestDirectoryAndRelationsAdministration(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL is not set")
+	}
+	f := newFixture(t)
+	admin := newAdmin(t, f)
+	sysadmin := newSystemAdmin(t, f)
+	teacher := newTestClient(t, f.server.URL)
+	teacher.login("teacher", teacherPassword)
+	parent := newTestClient(t, f.server.URL)
+	parent.login("parent", parentPassword)
+	ctx := context.Background()
+	type named struct {
+		ID   uuid.UUID `json:"id"`
+		Name string    `json:"name"`
+	}
+	listNames := func(client *testClient, path string) []string {
+		var items []named
+		decodeResponse(t, client.request(http.MethodGet, path, nil, http.StatusOK), &items)
+		names := make([]string, 0, len(items))
+		for _, item := range items {
+			names = append(names, item.Name)
+		}
+		return names
+	}
+
+	// Предметы: создание, повтор названия, переименование, архив. Учитель справочники не меняет.
+	var physics named
+	decodeResponse(t, admin.request(http.MethodPost, "/api/v1/subjects", map[string]any{"name": "Физика"}, http.StatusCreated), &physics)
+	admin.request(http.MethodPost, "/api/v1/subjects", map[string]any{"name": "Физика"}, http.StatusConflict)
+	teacher.request(http.MethodPost, "/api/v1/subjects", map[string]any{"name": "Астрономия"}, http.StatusForbidden)
+	admin.request(http.MethodPatch, "/api/v1/subjects/"+physics.ID.String(), map[string]any{"name": "Физика и астрономия"}, http.StatusOK)
+	if names := strings.Join(listNames(admin, "/api/v1/subjects"), ","); !strings.Contains(names, "Физика и астрономия") {
+		t.Fatalf("subjects after rename = %s", names)
+	}
+	admin.request(http.MethodDelete, "/api/v1/subjects/"+physics.ID.String(), nil, http.StatusNoContent)
+	if names := strings.Join(listNames(admin, "/api/v1/subjects"), ","); strings.Contains(names, "Физика") {
+		t.Fatalf("archived subject is still listed: %s", names)
+	}
+
+	// Кабинеты.
+	admin.request(http.MethodPost, "/api/v1/rooms", map[string]any{"name": "204"}, http.StatusCreated)
+	teacher.request(http.MethodPost, "/api/v1/rooms", map[string]any{"name": "205"}, http.StatusForbidden)
+	if names := strings.Join(listNames(admin, "/api/v1/rooms"), ","); names != "101,204" {
+		t.Fatalf("rooms = %s, want 101,204", names)
+	}
+
+	// Класс переименовывается, его состав читается на дату.
+	admin.request(http.MethodPatch, "/api/v1/classes/"+f.classID.String(), map[string]any{"name": "5 «А»"}, http.StatusOK)
+	if names := strings.Join(listNames(admin, "/api/v1/classes"), ","); names != "5 «А»" {
+		t.Fatalf("classes after rename = %s", names)
+	}
+	var roster []struct {
+		ID uuid.UUID `json:"id"`
+	}
+	decodeResponse(t, admin.request(http.MethodGet, "/api/v1/classes/"+f.classID.String()+"/students?date=2026-09-10", nil, http.StatusOK), &roster)
+	if len(roster) != 1 || roster[0].ID != f.studentID {
+		t.Fatalf("class roster = %+v, want only the enrolled student", roster)
+	}
+	// Учителю класса состав нужен для журнала; учителю без назначения в этом классе — нет.
+	teacher.request(http.MethodGet, "/api/v1/classes/"+f.classID.String()+"/students?date=2026-09-10", nil, http.StatusOK)
+	otherTeacher := newTestClient(t, f.server.URL)
+	otherTeacher.login("other.teacher", otherPassword)
+	if status, _ := otherTeacher.raw(http.MethodGet, "/api/v1/classes/"+f.classID.String()+"/students?date=2026-09-10", nil); status != http.StatusForbidden && status != http.StatusNotFound {
+		t.Fatalf("teacher without an assignment read the class roster: %d", status)
+	}
+
+	// Учебный год и период меняет только системный администратор.
+	yearInput := map[string]any{"name": "2026/2027 учебный год", "starts_on": "2026-09-01", "ends_on": "2027-09-01", "is_current": true}
+	admin.request(http.MethodPatch, "/api/v1/academic-years/"+f.yearID.String(), yearInput, http.StatusForbidden)
+	sysadmin.request(http.MethodPatch, "/api/v1/academic-years/"+f.yearID.String(), yearInput, http.StatusOK)
+	if names := strings.Join(listNames(admin, "/api/v1/academic-years"), ","); names != "2026/2027 учебный год" {
+		t.Fatalf("academic years = %s", names)
+	}
+	periodInput := map[string]any{"name": "I четверть", "starts_on": "2026-09-01", "ends_on": "2026-10-31"}
+	admin.request(http.MethodPatch, "/api/v1/academic-periods/"+f.periodID.String(), periodInput, http.StatusForbidden)
+	sysadmin.request(http.MethodPatch, "/api/v1/academic-periods/"+f.periodID.String(), periodInput, http.StatusOK)
+	sysadmin.request(http.MethodPatch, "/api/v1/academic-periods/"+f.periodID.String(), map[string]any{"name": "I", "starts_on": "2026-10-31", "ends_on": "2026-09-01"}, http.StatusUnprocessableEntity)
+	var settings struct {
+		Timezone string `json:"timezone"`
+	}
+	decodeResponse(t, admin.request(http.MethodGet, "/api/v1/school/settings", nil, http.StatusOK), &settings)
+	if settings.Timezone == "" {
+		t.Fatal("school settings without a time zone")
+	}
+
+	// Второй ребёнок родителя: связь действует сразу, а после завершения ребёнок пропадает из списка родителя.
+	var parentID uuid.UUID
+	mustTest(t, f.pool.QueryRow(ctx, "SELECT p.id FROM parents p JOIN users u ON u.id = p.user_id WHERE u.login = 'parent'").Scan(&parentID))
+	children := func() int {
+		var items []struct {
+			ID uuid.UUID `json:"id"`
+		}
+		decodeResponse(t, parent.request(http.MethodGet, "/api/v1/children", nil, http.StatusOK), &items)
+		return len(items)
+	}
+	link := map[string]any{"parent_id": parentID, "student_id": f.otherStudentID, "valid_from": "2026-09-01"}
+	teacher.request(http.MethodPost, "/api/v1/parent-student", link, http.StatusForbidden)
+	admin.request(http.MethodPost, "/api/v1/parent-student", link, http.StatusNoContent)
+	if got := children(); got != 2 {
+		t.Fatalf("children after linking = %d, want 2", got)
+	}
+	link["valid_to"] = "2026-09-02"
+	admin.request(http.MethodPut, "/api/v1/parent-student", link, http.StatusNoContent)
+	if got := children(); got != 1 {
+		t.Fatalf("children after ending the link = %d, want 1", got)
+	}
+
+	// Учитель снят с предмета: после даты завершения он не может создать урок этого класса.
+	var assignments []struct {
+		ID        uuid.UUID `json:"id"`
+		TeacherID uuid.UUID `json:"teacher_id"`
+		EndsOn    *string   `json:"ends_on"`
+	}
+	decodeResponse(t, admin.request(http.MethodGet, "/api/v1/teaching-assignments", nil, http.StatusOK), &assignments)
+	if len(assignments) != 1 || assignments[0].TeacherID != f.teacherID {
+		t.Fatalf("assignments = %+v", assignments)
+	}
+	teacher.request(http.MethodPatch, "/api/v1/teaching-assignments/"+assignments[0].ID.String(), map[string]any{"ends_on": "2026-09-30"}, http.StatusForbidden)
+	admin.request(http.MethodPatch, "/api/v1/teaching-assignments/"+assignments[0].ID.String(), map[string]any{"ends_on": "2026-09-30"}, http.StatusOK)
+	lesson := map[string]any{"starts_at": "2026-10-05T09:00:00Z", "ends_at": "2026-10-05T09:45:00Z", "lesson_date": "2026-10-05",
+		"class_id": f.classID, "subject_id": f.subjectID, "teacher_id": f.teacherID, "academic_period_id": f.periodID}
+	if status, body := teacher.raw(http.MethodPost, "/api/v1/lessons", lesson); status == http.StatusCreated {
+		t.Fatalf("teacher created a lesson after the assignment ended: %s", body)
+	}
+	lesson["lesson_date"], lesson["starts_at"], lesson["ends_at"] = "2026-09-29", "2026-09-29T09:00:00Z", "2026-09-29T09:45:00Z"
+	teacher.request(http.MethodPost, "/api/v1/lessons", lesson, http.StatusCreated)
+}
+
+// Изменение строки шаблона пересоздаёт её будущие незаполненные уроки по новым данным, удаление — убирает их.
+// Уроки с темой (и тем более с оценками) остаются. Свой учебный год вокруг текущей даты: уроки должны быть в будущем.
+func TestScheduleEntryChangesResyncFutureLessons(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL is not set")
+	}
+	f := newFixture(t)
+	admin := newAdmin(t, f)
+	sysadmin := newSystemAdmin(t, f)
+	ctx := context.Background()
+	moscow, err := time.LoadLocation("Europe/Moscow")
+	mustTest(t, err)
+	now := time.Now().In(moscow)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	day := func(offset int) string { return today.AddDate(0, 0, offset).Format(time.DateOnly) }
+	var created struct {
+		ID uuid.UUID `json:"id"`
+	}
+	decodeResponse(t, sysadmin.request(http.MethodPost, "/api/v1/academic-years", map[string]any{"name": "Синхронизация", "starts_on": day(-30), "ends_on": day(120), "is_current": false}, http.StatusCreated), &created)
+	yearID := created.ID
+	decodeResponse(t, sysadmin.request(http.MethodPost, "/api/v1/academic-periods", map[string]any{"academic_year_id": yearID, "name": "Четверть", "starts_on": day(-30), "ends_on": day(120)}, http.StatusCreated), &created)
+	periodID := created.ID
+	decodeResponse(t, admin.request(http.MethodPost, "/api/v1/classes", map[string]any{"academic_year_id": yearID, "name": "7С"}, http.StatusCreated), &created)
+	classID := created.ID
+	admin.request(http.MethodPost, "/api/v1/teaching-assignments", map[string]any{"teacher_id": f.teacherID, "class_id": classID, "subject_id": f.subjectID,
+		"academic_period_id": periodID, "starts_on": day(-30)}, http.StatusCreated)
+	weekday := func(date time.Time) int { return (int(date.Weekday())+6)%7 + 1 }
+	entry := map[string]any{"class_id": classID, "subject_id": f.subjectID, "teacher_id": f.teacherID, "academic_period_id": periodID,
+		"weekday": weekday(today.AddDate(0, 0, 1)), "lesson_number": 7, "starts_at": "14:00", "ends_at": "14:45", "valid_from": day(-30)}
+	decodeResponse(t, admin.request(http.MethodPost, "/api/v1/schedule-entries", entry, http.StatusCreated), &created)
+	entryID := created.ID
+	admin.request(http.MethodPost, "/api/v1/schedule/generate", map[string]any{"from": day(1), "to": day(28), "class_id": classID}, http.StatusOK)
+
+	futureDates := func() []string {
+		rows, err := f.pool.Query(ctx, "SELECT lesson_date::text FROM lessons WHERE class_id = $1 ORDER BY lesson_date", classID)
+		mustTest(t, err)
+		var dates []string
+		for rows.Next() {
+			var date string
+			mustTest(t, rows.Scan(&date))
+			dates = append(dates, date)
+		}
+		mustTest(t, rows.Err())
+		return dates
+	}
+	before := futureDates()
+	if len(before) != 4 || before[0] != day(1) {
+		t.Fatalf("generated lessons = %v, want 4 weekly lessons from %s", before, day(1))
+	}
+	// Учитель заранее записал тему третьего урока: такой урок не удаляется.
+	_, err = f.pool.Exec(ctx, "UPDATE lessons SET topic = 'Подготовленная тема' WHERE class_id = $1 AND lesson_date = $2::date", classID, before[2])
+	mustTest(t, err)
+
+	// Урок переносится на следующий день недели.
+	entry["weekday"] = weekday(today.AddDate(0, 0, 2))
+	delete(entry, "class_id")
+	delete(entry, "subject_id")
+	delete(entry, "academic_period_id")
+	admin.request(http.MethodPatch, "/api/v1/schedule-entries/"+entryID.String(), entry, http.StatusOK)
+	after := futureDates()
+	want := []string{day(2), day(9), before[2], day(16)}
+	if strings.Join(after, ",") != strings.Join(want, ",") {
+		t.Fatalf("lessons after the move = %v, want %v (new weekday up to the old horizon, the lesson with a topic kept)", after, want)
+	}
+
+	admin.request(http.MethodDelete, "/api/v1/schedule-entries/"+entryID.String(), nil, http.StatusNoContent)
+	if left := futureDates(); len(left) != 1 || left[0] != before[2] {
+		t.Fatalf("lessons after deleting the entry = %v, want only the one with a topic", left)
+	}
+	var resynced int
+	mustTest(t, f.pool.QueryRow(ctx, "SELECT count(*) FROM audit_logs WHERE action = 'lessons.resynced' AND entity_id = $1", entryID).Scan(&resynced))
+	if resynced != 2 {
+		t.Fatalf("lessons.resynced audit entries = %d, want 2", resynced)
+	}
+}
+
 // Переход на новый учебный год: классы относятся к году, поэтому 5А прошлого года и 6А нового — разные классы.
 // Назначения, шаблон и зачисления не должны смешивать годы, а перенос переносит 5А → 6А явно.
 func TestAcademicYearTransition(t *testing.T) {

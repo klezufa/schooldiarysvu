@@ -85,7 +85,26 @@ func TestManagementAndReportsEndToEnd(t *testing.T) {
 		ID uuid.UUID `json:"id"`
 	}
 	decodeResponse(t, announcementBody, &announcement)
+	// Объявление классу видит ученик этого класса; после удаления — нет.
+	announcementVisible := func() bool {
+		var items []struct {
+			ID uuid.UUID `json:"id"`
+		}
+		decodeResponse(t, student.request(http.MethodGet, "/api/v1/announcements", nil, http.StatusOK), &items)
+		for _, item := range items {
+			if item.ID == announcement.ID {
+				return true
+			}
+		}
+		return false
+	}
+	if !announcementVisible() {
+		t.Fatal("student does not see the class announcement")
+	}
 	teacher.request(http.MethodDelete, "/api/v1/announcements/"+announcement.ID.String(), nil, http.StatusNoContent)
+	if announcementVisible() {
+		t.Fatal("deleted announcement is still visible")
+	}
 	teacher.request(http.MethodGet, "/api/v1/notifications/digest?frequency=daily", nil, http.StatusOK)
 	teacher.request(http.MethodGet, "/api/v1/notifications/digest?frequency=hourly", nil, http.StatusUnprocessableEntity)
 
