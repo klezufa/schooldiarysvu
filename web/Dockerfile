@@ -6,7 +6,7 @@ COPY web/ ./
 COPY api/openapi.yaml /api/openapi.yaml
 RUN npm run generate && npm run build
 
-FROM nginxinc/nginx-unprivileged:1.29-alpine
+FROM nginxinc/nginx-unprivileged:1.31-alpine
 # Upstream-образ выходит реже, чем исправления Alpine (Trivy: 47 HIGH/CRITICAL в brotli, curl, openssl, expat на момент
 # сборки). Пакеты обновляются при каждой сборке; curl, нужный только для отладки, удаляется.
 USER root
