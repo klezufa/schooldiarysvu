@@ -657,9 +657,20 @@ func TestParentChildSuggestionsAndLinkRemoval(t *testing.T) {
 		t.Fatalf("after removal: links = %d (want 0), audit = %d (want 1)", active, removed)
 	}
 
-	// Давнюю связь удалить нельзя — только завершить.
+	// Давняя связь не удаляется, а завершается вчерашним днём по школьному времени: доступ пропадает сразу, история остаётся.
 	admin.request(http.MethodPost, "/api/v1/parent-student", map[string]any{"parent_id": parentID, "student_id": sonID, "valid_from": "2026-09-01"}, http.StatusNoContent)
-	admin.request(http.MethodDelete, fmt.Sprintf("/api/v1/parent-student?parent_id=%s&student_id=%s&valid_from=2026-09-01", parentID, sonID), nil, http.StatusConflict)
+	admin.request(http.MethodDelete, fmt.Sprintf("/api/v1/parent-student?parent_id=%s&student_id=%s&valid_from=2026-09-01", parentID, sonID), nil, http.StatusNoContent)
+	var endedYesterday bool
+	mustTest(t, f.pool.QueryRow(ctx, "SELECT valid_to = school_today() - 1 FROM parent_student WHERE parent_id = $1 AND valid_from = '2026-09-01'", parentID).Scan(&endedYesterday))
+	if !endedYesterday {
+		t.Fatal("an older link was not ended yesterday")
+	}
+	for _, item := range suggest() {
+		if item.StudentID == sonID {
+			return
+		}
+	}
+	t.Fatal("the child of an ended link is not suggested again")
 }
 
 // Изменение строки шаблона пересоздаёт её будущие незаполненные уроки по новым данным, удаление — убирает их.

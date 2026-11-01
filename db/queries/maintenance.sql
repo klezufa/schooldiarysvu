@@ -142,7 +142,8 @@ SELECT id, teacher_id, class_id, starts_on, ends_on FROM class_teachers ORDER BY
 
 -- name: ListParentStudentLinks :many
 SELECT ps.parent_id, ps.student_id, ps.valid_from, ps.valid_to, pu.display_name AS parent_name, su.display_name AS student_name,
-       COALESCE(cls.name, '') AS class_name
+       COALESCE(cls.name, '') AS class_name,
+       (ps.valid_from <= school_today() AND (ps.valid_to IS NULL OR ps.valid_to >= school_today()))::boolean AS active
 FROM parent_student ps
 JOIN parents p ON p.id = ps.parent_id JOIN users pu ON pu.id = p.user_id
 JOIN students s ON s.id = ps.student_id JOIN users su ON su.id = s.user_id
@@ -172,6 +173,11 @@ ORDER BY u.display_name;
 -- name: GetParentStudentLinkStart :one
 SELECT valid_from, valid_from >= school_today() AS removable FROM parent_student
 WHERE parent_id = $1 AND student_id = $2 AND valid_from = sqlc.arg(valid_from)::date;
+
+-- name: EndParentStudentLinkYesterday :exec
+-- Давняя связь завершается вчерашним днём по школьному времени: доступ пропадает сразу, история остаётся.
+UPDATE parent_student SET valid_to = school_today() - 1
+WHERE parent_id = $1 AND student_id = $2 AND valid_from = sqlc.arg(valid_from)::date AND (valid_to IS NULL OR valid_to >= school_today());
 
 -- name: DeleteParentStudentLink :exec
 DELETE FROM parent_student WHERE parent_id = $1 AND student_id = $2 AND valid_from = sqlc.arg(valid_from)::date;

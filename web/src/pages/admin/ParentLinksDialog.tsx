@@ -3,7 +3,7 @@ import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-quer
 import { Link2, Search, TriangleAlert, Unlink } from 'lucide-react'
 import { api, apiPage, mutation, queryString } from '../../api/client'
 import type { ChildSuggestion, ParentStudentLink, User } from '../../api/types'
-import { addDays, dateISO } from '../../lib/dates'
+import { dateISO } from '../../lib/dates'
 import { useToast } from '../../components/toastContext'
 import { Modal } from '../../components/UI'
 import { useParentLinks } from './parentLinks'
@@ -58,14 +58,12 @@ export function ParentLinksDialog({ parent, onClose }: { parent: User | null; on
   }
   const link = (studentId: string, name: string) => run(studentId, () => mutation('/parent-student', 'POST', { parent_id: parentId, student_id: studentId, valid_from: dateISO() }),
     `${name}: связь с родителем сохранена`)
-  // Связь, начатую сегодня, сервер удаляет; давнюю завершает вчерашним днём — доступ пропадает сразу, история остаётся.
+  // Удалить связь или завершить её вчерашним днём, решает сервер по школьной дате: часы компьютера могут показывать
+  // другие сутки. Доступ пропадает сразу в обоих случаях.
   const unlink = (item: ParentStudentLink) => {
     if (!window.confirm(`Отвязать ${item.student_name}? Родитель перестанет видеть оценки и расписание этого ребёнка.`)) return
-    const today = dateISO()
-    void run(item.student_id, () => (item.valid_from >= today
-      ? mutation(`/parent-student${queryString({ parent_id: item.parent_id, student_id: item.student_id, valid_from: item.valid_from })}`, 'DELETE')
-      : mutation('/parent-student', 'PUT', { parent_id: item.parent_id, student_id: item.student_id, valid_from: item.valid_from, valid_to: addDays(today, -1) })),
-    `${item.student_name}: связь снята`)
+    void run(item.student_id, () => mutation(`/parent-student${queryString({ parent_id: item.parent_id, student_id: item.student_id, valid_from: item.valid_from })}`, 'DELETE'),
+      `${item.student_name}: связь снята`)
   }
   const searchResults = (found.data?.items ?? []).filter((user) => user.student_id && !linkedIds.has(user.student_id))
   return (

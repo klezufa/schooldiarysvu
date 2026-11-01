@@ -651,6 +651,8 @@ type OperationsOverviewNetworkProfile string
 
 // ParentStudentLink defines model for ParentStudentLink.
 type ParentStudentLink struct {
+	// Active Связь действует сегодня по часовому поясу школы — а не по часам компьютера, на котором открыт дневник
+	Active      bool                `json:"active"`
 	ClassName   *string             `json:"class_name"`
 	ParentId    openapi_types.UUID  `json:"parent_id"`
 	ParentName  string              `json:"parent_name"`

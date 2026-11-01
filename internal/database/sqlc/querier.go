@@ -71,6 +71,8 @@ type Querier interface {
 	// изменении или удалении строки, чтобы в расписании не оставались уроки по старому шаблону. Заполненные остаются.
 	DeleteUntouchedFutureLessons(ctx context.Context, scheduleEntryID pgtype.UUID) ([]time.Time, error)
 	EndEnrollment(ctx context.Context, arg EndEnrollmentParams) error
+	// Давняя связь завершается вчерашним днём по школьному времени: доступ пропадает сразу, история остаётся.
+	EndParentStudentLinkYesterday(ctx context.Context, arg EndParentStudentLinkYesterdayParams) error
 	EnrollmentOverlaps(ctx context.Context, arg EnrollmentOverlapsParams) (bool, error)
 	EnrollmentOverlapsExcept(ctx context.Context, arg EnrollmentOverlapsExceptParams) (bool, error)
 	EnsureParent(ctx context.Context, userID uuid.UUID) error

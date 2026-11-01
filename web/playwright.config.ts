@@ -13,6 +13,8 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     // E2E_CHANNEL=msedge или chrome — запуск в установленном браузере без загрузки Chromium Playwright.
     channel: process.env.E2E_CHANNEL || undefined,
+    // E2E_TIMEZONE=UTC — браузер в другом часовом поясе, чем школа (как в CI): даты должен решать сервер, а не часы компьютера.
+    timezoneId: process.env.E2E_TIMEZONE || undefined,
   },
   // Если задан E2E_BASE_URL, тесты идут против уже запущенного развёртывания (например, diary.cmd start), а dev-сервер не нужен.
   webServer: process.env.E2E_BASE_URL ? undefined : {

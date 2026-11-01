@@ -277,13 +277,13 @@ paths:
     delete:
       tags: [administration]
       operationId: removeParentStudent
-      summary: Удалить ошибочную связь, которая начинается сегодня или позже; действующую раньше связь можно только завершить (PUT), чтобы сохранилась история
+      summary: Снять связь сразу. Связь, начатую сегодня (по часовому поясу школы) или позже, сервер удаляет; давнюю завершает вчерашним днём, чтобы сохранилась история доступа
       parameters:
         - {$ref: '#/components/parameters/CSRF'}
         - {name: parent_id, in: query, required: true, schema: {type: string, format: uuid}}
         - {name: student_id, in: query, required: true, schema: {type: string, format: uuid}}
         - {name: valid_from, in: query, required: true, schema: {type: string, format: date}}
-      responses: {'204': {description: Связь удалена}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}, '409': {$ref: '#/components/responses/Conflict'}}
+      responses: {'204': {description: Связь снята}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}
   /parent-student/suggestions:
     get:
       tags: [administration]
@@ -1012,7 +1012,7 @@ components:
           properties: {csrf_token: {type: string}}
     ParentStudentLink:
       type: object
-      required: [parent_id, student_id, valid_from, parent_name, student_name]
+      required: [parent_id, student_id, valid_from, parent_name, student_name, active]
       properties:
         parent_id: {type: string, format: uuid}
         student_id: {type: string, format: uuid}
@@ -1021,6 +1021,9 @@ components:
         parent_name: {type: string}
         student_name: {type: string}
         class_name: {type: string, nullable: true}
+        active:
+          type: boolean
+          description: Связь действует сегодня по часовому поясу школы — а не по часам компьютера, на котором открыт дневник
     ChildSuggestion:
       type: object
       required: [student_id, display_name, reasons]

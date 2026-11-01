@@ -12,7 +12,6 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 
 	"schooldiarysvu/internal/api"
-	"schooldiarysvu/internal/apperr"
 	db "schooldiarysvu/internal/database/sqlc"
 )
 
@@ -30,7 +29,7 @@ func (s *Service) ListParentStudentLinks(ctx context.Context, actor Principal) (
 	links := make([]api.ParentStudentLink, 0, len(rows))
 	for _, row := range rows {
 		link := api.ParentStudentLink{ParentId: row.ParentID, StudentId: row.StudentID, ValidFrom: openapi_types.Date{Time: row.ValidFrom},
-			ParentName: row.ParentName, StudentName: row.StudentName, ClassName: optionalString(row.ClassName)}
+			ParentName: row.ParentName, StudentName: row.StudentName, ClassName: optionalString(row.ClassName), Active: row.Active}
 		if row.ValidTo.Valid {
 			link.ValidTo = &openapi_types.Date{Time: row.ValidTo.Time}
 		}
@@ -78,9 +77,9 @@ func (s *Service) SuggestChildren(ctx context.Context, actor Principal, parentID
 	return result, nil
 }
 
-// RemoveParentStudent удаляет ошибочную связь, которая начинается сегодня или позже: завершить её «вчерашним» днём
-// нельзя, а до конца дня чужой родитель видел бы оценки ребёнка. Связь, действовавшую раньше, можно только завершить —
-// иначе пропала бы история, кто и когда имел доступ.
+// RemoveParentStudent снимает связь сразу. Что именно сделать, решает сервер по школьной дате, а не браузер: связь,
+// начатую сегодня или позже, он удаляет (завершить её вчерашним днём нельзя, а до полуночи чужой родитель видел бы
+// оценки ребёнка); давнюю завершает вчерашним днём — доступ пропадает, а история, кто и когда его имел, остаётся.
 func (s *Service) RemoveParentStudent(ctx context.Context, actor Principal, parentID, studentID uuid.UUID, validFrom time.Time) error {
 	if err := actor.requireAdministrator(); err != nil {
 		return err
@@ -91,13 +90,16 @@ func (s *Service) RemoveParentStudent(ctx context.Context, actor Principal, pare
 		if err != nil {
 			return mapDatabaseError(err)
 		}
+		oldValues, _ := json.Marshal(map[string]any{"parent_id": parentID, "student_id": studentID, "valid_from": link.ValidFrom.Format(time.DateOnly)})
 		if !link.Removable {
-			return apperr.Conflict("Связь действует с " + link.ValidFrom.Format("02.01.2006") + " — её можно только завершить, чтобы сохранилась история доступа")
+			if err := q.EndParentStudentLinkYesterday(ctx, db.EndParentStudentLinkYesterdayParams{ParentID: parentID, StudentID: studentID, ValidFrom: validFrom}); err != nil {
+				return mapDatabaseError(err)
+			}
+			return audit(ctx, q, actor, "parent_student.ended", "student", studentID, oldValues, nil)
 		}
 		if err := q.DeleteParentStudentLink(ctx, db.DeleteParentStudentLinkParams{ParentID: parentID, StudentID: studentID, ValidFrom: validFrom}); err != nil {
 			return mapDatabaseError(err)
 		}
-		oldValues, _ := json.Marshal(map[string]any{"parent_id": parentID, "student_id": studentID, "valid_from": validFrom.Format(time.DateOnly)})
 		return audit(ctx, q, actor, "parent_student.removed", "student", studentID, oldValues, nil)
 	})
 }

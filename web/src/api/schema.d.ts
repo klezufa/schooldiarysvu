@@ -309,7 +309,7 @@ export interface paths {
         get: operations["listParentStudentLinks"];
         put: operations["updateParentStudent"];
         post: operations["linkParentStudent"];
-        /** Удалить ошибочную связь, которая начинается сегодня или позже; действующую раньше связь можно только завершить (PUT), чтобы сохранилась история */
+        /** Снять связь сразу. Связь, начатую сегодня (по часовому поясу школы) или позже, сервер удаляет; давнюю завершает вчерашним днём, чтобы сохранилась история доступа */
         delete: operations["removeParentStudent"];
         options?: never;
         head?: never;
@@ -1434,6 +1434,8 @@ export interface components {
             parent_name: string;
             student_name: string;
             class_name?: string | null;
+            /** @description Связь действует сегодня по часовому поясу школы — а не по часам компьютера, на котором открыт дневник */
+            active: boolean;
         };
         ChildSuggestion: {
             /** Format: uuid */
@@ -3220,7 +3222,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Связь удалена */
+            /** @description Связь снята */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -3229,7 +3231,6 @@ export interface operations {
             };
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
         };
     };
     suggestChildrenForParent: {

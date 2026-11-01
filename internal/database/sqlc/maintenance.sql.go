@@ -180,6 +180,23 @@ func (q *Queries) DeleteParentStudentLink(ctx context.Context, arg DeleteParentS
 	return err
 }
 
+const endParentStudentLinkYesterday = `-- name: EndParentStudentLinkYesterday :exec
+UPDATE parent_student SET valid_to = school_today() - 1
+WHERE parent_id = $1 AND student_id = $2 AND valid_from = $3::date AND (valid_to IS NULL OR valid_to >= school_today())
+`
+
+type EndParentStudentLinkYesterdayParams struct {
+	ParentID  uuid.UUID `json:"parent_id"`
+	StudentID uuid.UUID `json:"student_id"`
+	ValidFrom time.Time `json:"valid_from"`
+}
+
+// Давняя связь завершается вчерашним днём по школьному времени: доступ пропадает сразу, история остаётся.
+func (q *Queries) EndParentStudentLinkYesterday(ctx context.Context, arg EndParentStudentLinkYesterdayParams) error {
+	_, err := q.db.Exec(ctx, endParentStudentLinkYesterday, arg.ParentID, arg.StudentID, arg.ValidFrom)
+	return err
+}
+
 const enrollmentOverlapsExcept = `-- name: EnrollmentOverlapsExcept :one
 SELECT EXISTS (SELECT 1 FROM enrollments WHERE id <> $1 AND student_id = $2
  AND starts_on <= $4::date AND (ends_on IS NULL OR ends_on >= $3::date)) AS overlaps
@@ -483,7 +500,8 @@ func (q *Queries) ListGradeScales(ctx context.Context) ([]ListGradeScalesRow, er
 
 const listParentStudentLinks = `-- name: ListParentStudentLinks :many
 SELECT ps.parent_id, ps.student_id, ps.valid_from, ps.valid_to, pu.display_name AS parent_name, su.display_name AS student_name,
-       COALESCE(cls.name, '') AS class_name
+       COALESCE(cls.name, '') AS class_name,
+       (ps.valid_from <= school_today() AND (ps.valid_to IS NULL OR ps.valid_to >= school_today()))::boolean AS active
 FROM parent_student ps
 JOIN parents p ON p.id = ps.parent_id JOIN users pu ON pu.id = p.user_id
 JOIN students s ON s.id = ps.student_id JOIN users su ON su.id = s.user_id
@@ -503,6 +521,7 @@ type ListParentStudentLinksRow struct {
 	ParentName  string      `json:"parent_name"`
 	StudentName string      `json:"student_name"`
 	ClassName   string      `json:"class_name"`
+	Active      bool        `json:"active"`
 }
 
 func (q *Queries) ListParentStudentLinks(ctx context.Context) ([]ListParentStudentLinksRow, error) {
@@ -522,6 +541,7 @@ func (q *Queries) ListParentStudentLinks(ctx context.Context) ([]ListParentStude
 			&i.ParentName,
 			&i.StudentName,
 			&i.ClassName,
+			&i.Active,
 		); err != nil {
 			return nil, err
 		}
