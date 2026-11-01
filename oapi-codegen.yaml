@@ -1,0 +1,7 @@
+package: api
+generate:
+  models: true
+output: internal/api/openapi.gen.go
+output-options:
+  skip-fmt: false
+  skip-prune: false

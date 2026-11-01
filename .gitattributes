@@ -1,0 +1,9 @@
+# Скрипты сервера и конфигурация контейнеров всегда с LF: bash и nginx в контейнерах не понимают CRLF,
+# а core.autocrlf=true на Windows иначе выдал бы их с CRLF при checkout.
+*.sh text eol=lf
+*.conf text eol=lf
+Dockerfile* text eol=lf
+*.yml text eol=lf
+# PowerShell 5.1 и cmd ожидают CRLF.
+*.ps1 text eol=crlf
+*.cmd text eol=crlf

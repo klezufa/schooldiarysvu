@@ -1,0 +1,28 @@
+# Профиль https. Запуск: docker compose -f docker-compose.yml -f docker-compose.https.yml up -d
+# Сертификат и ключ — в ${TLS_DIR:-./deploy/tls}: fullchain.pem (644) и privkey.pem (600, владелец uid 101 — пользователь nginx
+# в образе nginx-unprivileged). Получение и продление: docs/https.md. Профиль local-http (без этого файла) не шифрует трафик.
+x-https-environment: &https-environment
+  NETWORK_PROFILE: https
+  SESSION_COOKIE_SECURE: "true"
+  # Только публичный сертификат: backend показывает срок действия на странице «Система».
+  TLS_CERT_FILE: /run/tls/fullchain.pem
+
+services:
+  backend:
+    environment: *https-environment
+    volumes:
+      - ${TLS_DIR:-./deploy/tls}/fullchain.pem:/run/tls/fullchain.pem:ro
+
+  worker:
+    environment: *https-environment
+
+  nginx:
+    ports: !override
+      # Для HTTPS по умолчанию слушаются все интерфейсы сервера; ограничьте доступ firewall-ом (docs/network.md).
+      - "${BIND_ADDR:-0.0.0.0}:${HTTP_PORT:-80}:8080"
+      - "${BIND_ADDR:-0.0.0.0}:${HTTPS_PORT:-443}:8443"
+    volumes:
+      - ./deploy/nginx/https.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/nginx/profile-headers-https.conf:/etc/nginx/snippets/profile-headers.conf:ro
+      - ${TLS_DIR:-./deploy/tls}/fullchain.pem:/etc/nginx/tls/fullchain.pem:ro
+      - ${TLS_DIR:-./deploy/tls}/privkey.pem:/etc/nginx/tls/privkey.pem:ro

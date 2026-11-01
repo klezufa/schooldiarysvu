@@ -1,0 +1,29 @@
+version: "2"
+run:
+  timeout: 5m
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - gosec
+    - nilerr
+    - noctx
+    - rowserrcheck
+    - sqlclosecheck
+    - errorlint
+    - gofumpt
+    - misspell
+    - revive
+    - unconvert
+    - unparam
+  exclusions:
+    paths:
+      - internal/api/openapi.gen.go
+      - internal/database/sqlc
+formatters:
+  enable:
+    - gofumpt
+  exclusions:
+    paths:
+      - internal/api/openapi.gen.go
+      - internal/database/sqlc

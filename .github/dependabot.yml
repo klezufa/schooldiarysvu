@@ -1,0 +1,25 @@
+version: 2
+updates:
+  # Минорные и патч-обновления группируются в один PR; мажорные приходят отдельно — в них бывают несовместимые изменения.
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      go-minor:
+        update-types: [minor, patch]
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: weekly
+    groups:
+      npm-minor:
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+  - package-ecosystem: docker
+    directories: [/deploy, /web]
+    schedule:
+      interval: monthly

@@ -1,0 +1,25 @@
+# Контекст сборки Docker: только исходники. Секреты, инструменты и артефакты в образы не попадают.
+.git
+.tools
+.tmp
+.local
+.env
+.env.*
+!.env.example
+backups
+data
+coverage.out
+*.log
+*.pem
+*.key
+
+# Зависимости и результаты сборки frontend пересоздаются внутри образа.
+web/node_modules
+web/dist
+web/.tools
+web/test-results
+web/playwright-report
+
+# Документация не нужна для сборки образов.
+docs
+**/*.md

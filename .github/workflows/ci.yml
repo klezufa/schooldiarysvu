@@ -1,0 +1,169 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "24"
+  SQLC_VERSION: "1.29.0"
+  OAPI_CODEGEN_VERSION: "v2.4.1"
+
+jobs:
+  go:
+    name: Go — формат, генерация, vet, тесты (race)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.11-alpine3.24
+        env:
+          POSTGRES_USER: diary
+          # Одноразовый пароль контейнера CI, доступного только внутри задания.
+          POSTGRES_PASSWORD: ci-throwaway-${{ github.run_id }}
+          POSTGRES_DB: diary_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U diary" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgres://diary:ci-throwaway-${{ github.run_id }}@127.0.0.1:5432/diary_ci?sslmode=disable
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: go mod tidy не меняет файлы
+        run: go mod tidy && git diff --exit-code go.mod go.sum
+      - name: gofmt
+        run: test -z "$(gofmt -l cmd internal db)" || (gofmt -l cmd internal db && exit 1)
+      - name: Сгенерированный код соответствует SQL и OpenAPI
+        run: |
+          curl -sSfL "https://downloads.sqlc.dev/sqlc_${SQLC_VERSION}_linux_amd64.tar.gz" | tar -xz -C /usr/local/bin sqlc
+          go install "github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@${OAPI_CODEGEN_VERSION}"
+          sqlc generate
+          oapi-codegen --config oapi-codegen.yaml api/openapi.yaml
+          git diff --exit-code internal/database/sqlc internal/api
+      - run: go vet ./...
+      - run: go build ./...
+      - name: Тесты (с интеграционными, race, случайный порядок)
+        run: go test -race -shuffle=on -count=1 ./...
+
+  vulncheck:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
+
+  web:
+    name: Web — типы, линтер, Vitest, сборка, аудит
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: Типы API соответствуют OpenAPI
+        run: npm run generate && git diff --exit-code src/api/schema.d.ts
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npx vitest run
+      - run: npm run build
+      - run: npm audit --omit=dev
+
+  e2e:
+    name: Сквозные тесты против собранного сервера
+    needs: [go, web]
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.11-alpine3.24
+        env:
+          POSTGRES_USER: diary
+          POSTGRES_PASSWORD: ci-throwaway-${{ github.run_id }}
+          POSTGRES_DB: diary
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U diary" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgres://diary:ci-throwaway-${{ github.run_id }}@127.0.0.1:5432/diary?sslmode=disable
+      # Временный пароль демо-пользователей генерируется на каждый запуск; в репозитории паролей нет.
+      E2E_DEMO_PASSWORD: ci-demo-${{ github.run_id }}-${{ github.run_attempt }}
+      E2E_BASE_URL: http://127.0.0.1:8080
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Сборка frontend и backend
+        run: |
+          (cd web && npm ci && npm run generate && npm run build)
+          go build -o bin/server ./cmd/server
+          go build -o bin/seed ./cmd/seed
+      - name: Запуск сервера (применяет миграции)
+        run: |
+          mkdir -p "$RUNNER_TEMP/files"
+          HTTP_ADDR=127.0.0.1:8080 STATIC_DIR="$PWD/web/dist" APP_ENV=development FILE_STORAGE_PATH="$RUNNER_TEMP/files" \
+            nohup bin/server > "$RUNNER_TEMP/server.log" 2>&1 &
+          for attempt in $(seq 1 60); do
+            curl -sf http://127.0.0.1:8080/health/ready && exit 0
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/server.log"
+          exit 1
+      - name: Базовые демо-данные
+        run: ALLOW_DEMO_SEED=true APP_ENV=development DEMO_PASSWORD="$E2E_DEMO_PASSWORD" bin/seed
+      - name: Playwright
+        working-directory: web
+        run: |
+          npx playwright install --with-deps chromium
+          npx playwright test
+      - name: Отчёт и журнал сервера при падении
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-report
+          path: |
+            web/test-results
+            ${{ runner.temp }}/server.log
+          retention-days: 7
+
+  docker:
+    name: Сборка Docker-образов (без публикации)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: backend
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deploy/Dockerfile.backend
+          push: false
+      - name: web
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: web/Dockerfile
+          push: false

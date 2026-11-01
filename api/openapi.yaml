@@ -1,0 +1,1690 @@
+openapi: 3.0.3
+info:
+  title: Школьный дневник API
+  version: 1.0.0
+  description: REST API локального школьного дневника.
+  license: {name: MIT}
+servers: [{url: /api/v1}]
+security: [{sessionCookie: []}]
+tags:
+  - {name: auth}
+  - {name: administration}
+  - {name: journal}
+  - {name: learning}
+  - {name: content}
+paths:
+  /auth/login:
+    post:
+      tags: [auth]
+      security: []
+      operationId: login
+      requestBody: {$ref: '#/components/requestBodies/Login'}
+      responses:
+        '200': {$ref: '#/components/responses/LoginOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '500': {$ref: '#/components/responses/Internal'}
+  /auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      responses:
+        '204': {description: Сессия завершена}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /auth/password:
+    post:
+      tags: [auth]
+      operationId: changePassword
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [old_password, new_password]
+              properties:
+                old_password: {type: string, minLength: 1}
+                new_password: {type: string, minLength: 12, maxLength: 128}
+      responses:
+        '204': {description: "Пароль изменён, другие сессии отозваны"}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+  /me:
+    get:
+      tags: [auth]
+      operationId: getMe
+      responses:
+        '200':
+          description: Текущий пользователь
+          content: {application/json: {schema: {$ref: '#/components/schemas/User'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /users:
+    get:
+      tags: [administration]
+      operationId: listUsers
+      summary: Пользователи с поиском и фильтрами; общее число в заголовке X-Total-Count
+      parameters:
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Offset'}
+        - {name: search, in: query, schema: {type: string, maxLength: 100}}
+        - {name: role, in: query, schema: {$ref: '#/components/schemas/Role'}}
+        - {name: status, in: query, schema: {type: string, enum: [active, inactive, all], default: active}}
+        - {name: class_id, in: query, schema: {type: string, format: uuid}}
+      responses:
+        '200': {$ref: '#/components/responses/UsersOK'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      tags: [administration]
+      operationId: createUser
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [login, password, display_name, roles]
+              properties:
+                login: {type: string, minLength: 3, maxLength: 64}
+                password: {type: string, minLength: 12, maxLength: 128}
+                display_name: {type: string, minLength: 1, maxLength: 160}
+                roles: {type: array, minItems: 1, uniqueItems: true, items: {$ref: '#/components/schemas/Role'}}
+                student_code: {type: string, maxLength: 64}
+                class_id: {type: string, format: uuid}
+      responses:
+        '201': {description: Пользователь создан, content: {application/json: {schema: {$ref: '#/components/schemas/User'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+  /users/{id}:
+    patch:
+      tags: [administration]
+      operationId: updateUser
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, properties: {display_name: {type: string, minLength: 1, maxLength: 160}, roles: {type: array, minItems: 1, uniqueItems: true, items: {$ref: '#/components/schemas/Role'}}}}}}}
+      responses:
+        '200': {description: Профиль обновлён, content: {application/json: {schema: {$ref: '#/components/schemas/User'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      tags: [administration]
+      operationId: deactivateUser
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}]
+      responses:
+        '204': {description: Пользователь деактивирован}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /academic-years:
+    get:
+      tags: [administration]
+      operationId: listAcademicYears
+      responses: {'200': {description: Учебные годы, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/AcademicYear'}}}}}}
+    post:
+      tags: [administration]
+      operationId: createAcademicYear
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {$ref: '#/components/requestBodies/AcademicYear'}
+      responses: {'201': {description: Создан, content: {application/json: {schema: {$ref: '#/components/schemas/AcademicYear'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}, '422': {$ref: '#/components/responses/Unprocessable'}}
+  /academic-periods:
+    get:
+      tags: [administration]
+      operationId: listAcademicPeriods
+      description: Без academic_year_id — периоды всех неархивных учебных лет по дате начала.
+      parameters: [{name: academic_year_id, in: query, required: false, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: Периоды, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/AcademicPeriod'}}}}}}
+    post:
+      tags: [administration]
+      operationId: createAcademicPeriod
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - {$ref: '#/components/schemas/AcademicYearInput'}
+                - type: object
+                  required: [academic_year_id]
+                  properties: {academic_year_id: {type: string, format: uuid}}
+      responses: {'201': {description: Создан, content: {application/json: {schema: {$ref: '#/components/schemas/AcademicPeriod'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '422': {$ref: '#/components/responses/Unprocessable'}}
+  /academic-periods/{id}/close:
+    post:
+      tags: [administration]
+      operationId: closeAcademicPeriod
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}]
+      responses: {'204': {description: Период закрыт}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}}
+  /academic-periods/{id}/late-edits:
+    put:
+      tags: [administration]
+      operationId: setLateEdits
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [allowed], properties: {allowed: {type: boolean}}}}}}
+      responses: {'204': {description: Разрешение изменено}, '403': {$ref: '#/components/responses/Forbidden'}}
+  /academic-periods/{id}/carry-over:
+    post:
+      tags: [administration]
+      operationId: carryOverAcademicPeriod
+      summary: Перенести в период назначения учителей и недельный шаблон расписания из другого периода
+      description: >-
+        Переносятся назначения и строки шаблона, действующие на последний день исходного периода; в целевом периоде они
+        начинаются с его первого дня. Уже существующие назначения на класс и предмет и занятые слоты шаблона пропускаются,
+        поэтому повторный вызов ничего не дублирует.
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CarryOverRequest'}}}}
+      responses:
+        '200': {description: Итог переноса, content: {application/json: {schema: {$ref: '#/components/schemas/CarryOverResult'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+  /classes:
+    get:
+      tags: [administration]
+      operationId: listClasses
+      responses: {'200': {description: Классы, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/NamedEntity'}}}}}}
+    post:
+      tags: [administration]
+      operationId: createClass
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [academic_year_id, name], properties: {academic_year_id: {type: string, format: uuid}, name: {type: string, minLength: 1, maxLength: 32}}}}}}
+      responses: {'201': {description: Создан, content: {application/json: {schema: {$ref: '#/components/schemas/NamedEntity'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}}
+  /classes/{id}/students:
+    get:
+      tags: [administration]
+      operationId: listClassStudents
+      parameters: [{$ref: '#/components/parameters/ID'}, {name: date, in: query, required: true, schema: {type: string, format: date}}]
+      responses: {'200': {description: Ученики, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Student'}}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}
+  /subjects:
+    get:
+      tags: [administration]
+      operationId: listSubjects
+      responses: {'200': {description: Предметы, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/NamedEntity'}}}}}}
+    post:
+      tags: [administration]
+      operationId: createSubject
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {$ref: '#/components/requestBodies/Named'}
+      responses: {'201': {description: Создан, content: {application/json: {schema: {$ref: '#/components/schemas/NamedEntity'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}}
+  /rooms:
+    get:
+      tags: [administration]
+      operationId: listRooms
+      responses: {'200': {description: Кабинеты, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/NamedEntity'}}}}}}
+    post:
+      tags: [administration]
+      operationId: createRoom
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {$ref: '#/components/requestBodies/Named'}
+      responses: {'201': {description: Создан, content: {application/json: {schema: {$ref: '#/components/schemas/NamedEntity'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}}
+  /enrollments:
+    get:
+      tags: [administration]
+      operationId: listEnrollments
+      summary: Зачисления (администратор), по желанию только одного класса
+      parameters: [{name: class_id, in: query, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: Зачисления, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Enrollment'}}}}}, '403': {$ref: '#/components/responses/Forbidden'}}
+    post:
+      tags: [administration]
+      operationId: createEnrollment
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {$ref: '#/components/requestBodies/Enrollment'}
+      responses: {'201': {description: Ученик зачислен, content: {application/json: {schema: {$ref: '#/components/schemas/Enrollment'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '422': {$ref: '#/components/responses/Unprocessable'}}
+  /teaching-assignments:
+    get:
+      tags: [administration]
+      operationId: listTeachingAssignments
+      responses: {'200': {description: Назначения, content: {application/json: {schema: {type: array, items: {type: object, additionalProperties: true}}}}}}
+    post:
+      tags: [administration]
+      operationId: createTeachingAssignment
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {$ref: '#/components/requestBodies/TeachingAssignment'}
+      responses: {'201': {description: Назначение создано, content: {application/json: {schema: {$ref: '#/components/schemas/TeachingAssignment'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}, '422': {$ref: '#/components/responses/Unprocessable'}}
+  /class-teachers:
+    get:
+      tags: [administration]
+      operationId: listClassTeachers
+      responses: {'200': {description: Назначения классных руководителей, content: {application/json: {schema: {type: array, items: {type: object, additionalProperties: true}}}}}, '403': {$ref: '#/components/responses/Forbidden'}}
+    post:
+      tags: [administration]
+      operationId: assignClassTeacher
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [teacher_id, class_id, starts_on], properties: {teacher_id: {type: string, format: uuid}, class_id: {type: string, format: uuid}, starts_on: {type: string, format: date}, ends_on: {type: string, format: date}}}}}}
+      responses: {'204': {description: Классный руководитель назначен}, '403': {$ref: '#/components/responses/Forbidden'}, '422': {$ref: '#/components/responses/Unprocessable'}}
+  /parent-student:
+    get:
+      tags: [administration]
+      operationId: listParentStudentLinks
+      responses: {'200': {description: Связи родителей и учеников, content: {application/json: {schema: {type: array, items: {type: object, additionalProperties: true}}}}}, '403': {$ref: '#/components/responses/Forbidden'}}
+    post:
+      tags: [administration]
+      operationId: linkParentStudent
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [parent_id, student_id, valid_from], properties: {parent_id: {type: string, format: uuid}, student_id: {type: string, format: uuid}, valid_from: {type: string, format: date}, valid_to: {type: string, format: date}}}}}}
+      responses: {'204': {description: Связь создана}, '403': {$ref: '#/components/responses/Forbidden'}, '422': {$ref: '#/components/responses/Unprocessable'}}
+    put:
+      tags: [administration]
+      operationId: updateParentStudent
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [parent_id, student_id, valid_from], properties: {parent_id: {type: string, format: uuid}, student_id: {type: string, format: uuid}, valid_from: {type: string, format: date}, valid_to: {type: string, format: date}}}}}}
+      responses: {'204': {description: Связь обновлена}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}, '422': {$ref: '#/components/responses/Unprocessable'}}
+  /children:
+    get:
+      tags: [learning]
+      operationId: listChildren
+      responses: {'200': {description: Дети родителя, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Student'}}}}}, '403': {$ref: '#/components/responses/Forbidden'}}
+  /academic-years/{id}:
+    patch:
+      tags: [administration]
+      operationId: updateAcademicYear
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}]
+      requestBody: {$ref: '#/components/requestBodies/AcademicYear'}
+      responses: {'200': {description: Учебный год обновлён, content: {application/json: {schema: {$ref: '#/components/schemas/AcademicYear'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}, '422': {$ref: '#/components/responses/Unprocessable'}}
+    delete:
+      tags: [administration]
+      operationId: archiveAcademicYear
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}]
+      responses: {'204': {description: Учебный год архивирован}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}}
+  /academic-periods/{id}:
+    patch:
+      tags: [administration]
+      operationId: updateAcademicPeriod
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [name, starts_on, ends_on], properties: {name: {type: string, minLength: 1, maxLength: 64}, starts_on: {type: string, format: date}, ends_on: {type: string, format: date}}}}}}
+      responses: {'200': {description: Период обновлён, content: {application/json: {schema: {$ref: '#/components/schemas/AcademicPeriod'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}, '422': {$ref: '#/components/responses/Unprocessable'}}
+  /classes/{id}:
+    patch:
+      tags: [administration]
+      operationId: updateClass
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [name], properties: {name: {type: string, minLength: 1, maxLength: 32}}}}}}
+      responses: {'200': {description: Класс обновлён, content: {application/json: {schema: {$ref: '#/components/schemas/NamedEntity'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}}
+    delete:
+      tags: [administration]
+      operationId: archiveClass
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}]
+      responses: {'204': {description: Класс архивирован, журнал сохранён}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}
+  /subjects/{id}:
+    patch:
+      tags: [administration]
+      operationId: updateSubject
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}]
+      requestBody: {$ref: '#/components/requestBodies/Named'}
+      responses: {'200': {description: Предмет обновлён, content: {application/json: {schema: {$ref: '#/components/schemas/NamedEntity'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}}
+    delete:
+      tags: [administration]
+      operationId: archiveSubject
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}]
+      responses: {'204': {description: Предмет архивирован, журнал сохранён}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}
+  /rooms/{id}:
+    patch:
+      tags: [administration]
+      operationId: updateRoom
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}]
+      requestBody: {$ref: '#/components/requestBodies/Named'}
+      responses: {'200': {description: Кабинет обновлён, content: {application/json: {schema: {$ref: '#/components/schemas/NamedEntity'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}}
+    delete:
+      tags: [administration]
+      operationId: archiveRoom
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}]
+      responses: {'204': {description: Кабинет архивирован, журнал сохранён}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}
+  /enrollments/{id}:
+    patch:
+      tags: [administration]
+      operationId: updateEnrollment
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, properties: {ends_on: {type: string, format: date}}}}}}
+      responses: {'200': {description: Зачисление обновлено, content: {application/json: {schema: {$ref: '#/components/schemas/Enrollment'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}, '422': {$ref: '#/components/responses/Unprocessable'}}
+  /teaching-assignments/{id}:
+    patch:
+      tags: [administration]
+      operationId: updateTeachingAssignment
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, properties: {ends_on: {type: string, format: date}}}}}}
+      responses: {'200': {description: Назначение обновлено, content: {application/json: {schema: {$ref: '#/components/schemas/TeachingAssignment'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}, '422': {$ref: '#/components/responses/Unprocessable'}}
+  /class-teachers/{id}:
+    patch:
+      tags: [administration]
+      operationId: updateClassTeacher
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, properties: {ends_on: {type: string, format: date}}}}}}
+      responses: {'204': {description: Назначение классного руководителя обновлено}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}, '422': {$ref: '#/components/responses/Unprocessable'}}
+  /school/settings:
+    get:
+      tags: [administration]
+      operationId: getSchoolSettings
+      responses: {'200': {description: Настройки школы, content: {application/json: {schema: {$ref: '#/components/schemas/SchoolSettings'}}}}}
+    put:
+      tags: [administration]
+      operationId: updateSchoolSettings
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/SchoolSettings'}}}}
+      responses: {'200': {description: Настройки сохранены, content: {application/json: {schema: {$ref: '#/components/schemas/SchoolSettings'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '422': {$ref: '#/components/responses/Unprocessable'}}
+  /grade-scales:
+    get:
+      tags: [administration]
+      operationId: listGradeScales
+      responses: {'200': {description: Шкалы оценок, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/GradeScale'}}}}}}
+    post:
+      tags: [administration]
+      operationId: createGradeScale
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [name, allowed_values], properties: {name: {type: string, minLength: 1, maxLength: 100}, allowed_values: {type: array, minItems: 1, items: {type: number, minimum: 0}}}}}}}
+      responses: {'201': {description: Шкала создана, content: {application/json: {schema: {$ref: '#/components/schemas/GradeScale'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '422': {$ref: '#/components/responses/Unprocessable'}}
+  /grade-scales/{id}:
+    patch:
+      tags: [administration]
+      operationId: updateGradeScale
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [name, allowed_values, is_active], properties: {name: {type: string, minLength: 1, maxLength: 100}, allowed_values: {type: array, minItems: 1, items: {type: number, minimum: 0}}, is_active: {type: boolean}}}}}}
+      responses: {'200': {description: Шкала обновлена, content: {application/json: {schema: {$ref: '#/components/schemas/GradeScale'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '422': {$ref: '#/components/responses/Unprocessable'}}
+  /schedule-entries:
+    get:
+      tags: [learning]
+      operationId: listScheduleEntries
+      parameters: [{name: week_start, in: query, required: true, schema: {type: string, format: date}}, {name: student_id, in: query, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: Недельное расписание, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/ScheduleEntry'}}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}
+    post:
+      tags: [administration]
+      operationId: createScheduleEntry
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ScheduleEntryInput'}}}}
+      responses: {'201': {description: Строка расписания создана, content: {application/json: {schema: {$ref: '#/components/schemas/ScheduleEntry'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}, '422': {$ref: '#/components/responses/Unprocessable'}}
+  /schedule/current:
+    get:
+      tags: [learning]
+      operationId: getCurrentLessons
+      parameters: [{name: student_id, in: query, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: Текущий и следующий урок, content: {application/json: {schema: {$ref: '#/components/schemas/CurrentLessons'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}
+  /schedule:
+    get:
+      tags: [learning]
+      operationId: getSchedule
+      parameters:
+        - {name: from, in: query, required: true, schema: {type: string, format: date}}
+        - {name: to, in: query, required: true, schema: {type: string, format: date}}
+        - {name: student_id, in: query, schema: {type: string, format: uuid}}
+        - {name: class_id, in: query, schema: {type: string, format: uuid}}
+        - {name: teacher_id, in: query, schema: {type: string, format: uuid}}
+      responses: {'200': {description: Уроки расписания, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Lesson'}}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}
+  /lessons:
+    post:
+      tags: [journal]
+      operationId: createLesson
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {$ref: '#/components/requestBodies/Lesson'}
+      responses: {'201': {description: Урок создан, content: {application/json: {schema: {$ref: '#/components/schemas/Lesson'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '409': {$ref: '#/components/responses/Conflict'}, '422': {$ref: '#/components/responses/Unprocessable'}}
+  /lessons/{id}:
+    get:
+      tags: [journal]
+      operationId: getLesson
+      parameters: [{$ref: '#/components/parameters/ID'}]
+      responses: {'200': {description: Урок, content: {application/json: {schema: {$ref: '#/components/schemas/Lesson'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}
+    patch:
+      tags: [journal]
+      operationId: updateLesson
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}, {$ref: '#/components/parameters/Version'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [topic, status], properties: {topic: {type: string, maxLength: 1000}, room_id: {type: string, format: uuid}, status: {type: string, enum: [planned, completed, cancelled]}, cancellation_reason: {type: string}, lesson_date: {type: string, format: date}, starts_at: {type: string, format: date-time}, ends_at: {type: string, format: date-time}, teacher_id: {type: string, format: uuid}}}}}}
+      responses: {'200': {description: Урок обновлён, content: {application/json: {schema: {$ref: '#/components/schemas/Lesson'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}, '409': {$ref: '#/components/responses/Conflict'}}
+  /journal:
+    get:
+      tags: [journal]
+      operationId: getJournal
+      parameters:
+        - {name: class_id, in: query, required: true, schema: {type: string, format: uuid}}
+        - {name: subject_id, in: query, required: true, schema: {type: string, format: uuid}}
+        - {name: academic_period_id, in: query, required: true, schema: {type: string, format: uuid}}
+      responses: {'200': {description: Строки журнала, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/JournalEntry'}}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}
+  /lessons/{id}/works:
+    get:
+      tags: [journal]
+      operationId: listLessonWorks
+      parameters: [{$ref: '#/components/parameters/ID'}]
+      responses: {'200': {description: Работы урока, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/LessonWork'}}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}
+  /lesson-works:
+    post:
+      tags: [journal]
+      operationId: createLessonWork
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [lesson_id, work_type, title, weight, position], properties: {lesson_id: {type: string, format: uuid}, work_type: {type: string, enum: [classwork, homework, test, quiz, project, oral]}, title: {type: string, minLength: 1, maxLength: 300}, weight: {type: number, minimum: 0, exclusiveMinimum: true, maximum: 100}, is_important: {type: boolean, default: false}, position: {type: integer, minimum: 1, maximum: 100}}}}}}
+      responses: {'201': {description: Работа создана, content: {application/json: {schema: {$ref: '#/components/schemas/LessonWork'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}, '409': {$ref: '#/components/responses/Conflict'}, '422': {$ref: '#/components/responses/Unprocessable'}}
+  /grades:
+    post:
+      tags: [journal]
+      operationId: createGrade
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {$ref: '#/components/requestBodies/Grade'}
+      responses: {'201': {description: Оценка создана, content: {application/json: {schema: {$ref: '#/components/schemas/Grade'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}, '409': {$ref: '#/components/responses/Conflict'}, '422': {$ref: '#/components/responses/Unprocessable'}}
+    get:
+      tags: [learning]
+      operationId: listGrades
+      parameters: [{name: student_id, in: query, schema: {type: string, format: uuid}}, {name: academic_period_id, in: query, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: Оценки ученика, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/StudentGrade'}}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}
+  /grades/{id}:
+    patch:
+      tags: [journal]
+      operationId: updateGrade
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}, {$ref: '#/components/parameters/Version'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [value], properties: {value: {type: number, minimum: 0}, comment: {type: string, maxLength: 1000}}}}}}
+      responses: {'200': {description: Оценка изменена, content: {application/json: {schema: {$ref: '#/components/schemas/Grade'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}, '409': {$ref: '#/components/responses/Conflict'}, '422': {$ref: '#/components/responses/Unprocessable'}}
+    delete:
+      tags: [journal]
+      operationId: deleteGrade
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}, {$ref: '#/components/parameters/Version'}]
+      responses: {'204': {description: Оценка архивирована}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}, '409': {$ref: '#/components/responses/Conflict'}}
+  /grades/{id}/history:
+    get:
+      tags: [journal]
+      operationId: listGradeHistory
+      summary: История изменений оценки (только чтение)
+      parameters: [{$ref: '#/components/parameters/ID'}]
+      responses: {'200': {description: Изменения оценки от новых к старым, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/GradeHistoryEntry'}}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}
+  /term-grades:
+    post:
+      tags: [journal]
+      operationId: upsertTermGrade
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [student_id, subject_id, academic_period_id, value], properties: {student_id: {type: string, format: uuid}, subject_id: {type: string, format: uuid}, academic_period_id: {type: string, format: uuid}, value: {type: number, minimum: 0}}}}}}
+      responses: {'200': {description: Итоговая оценка сохранена, content: {application/json: {schema: {$ref: '#/components/schemas/TermGrade'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '422': {$ref: '#/components/responses/Unprocessable'}}
+  /attendance:
+    get:
+      tags: [journal]
+      operationId: listAttendance
+      parameters: [{name: lesson_id, in: query, required: true, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: Посещаемость, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Attendance'}}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}
+    put:
+      tags: [journal]
+      operationId: upsertAttendance
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {$ref: '#/components/requestBodies/Attendance'}
+      responses: {'200': {description: Отметка сохранена, content: {application/json: {schema: {$ref: '#/components/schemas/Attendance'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}, '422': {$ref: '#/components/responses/Unprocessable'}}
+  /attendance/bulk:
+    post:
+      tags: [journal]
+      operationId: markAllPresent
+      parameters: [{$ref: '#/components/parameters/CSRF'}, {$ref: '#/components/parameters/Idempotency'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [lesson_id], properties: {lesson_id: {type: string, format: uuid}}}}}}
+      responses: {'200': {description: Отмечены все ученики, content: {application/json: {schema: {type: object, required: [created_or_updated, items], properties: {created_or_updated: {type: integer}, items: {type: array, items: {$ref: '#/components/schemas/Attendance'}}}}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}, '409': {$ref: '#/components/responses/Conflict'}, '422': {$ref: '#/components/responses/Unprocessable'}}
+  /homework:
+    get:
+      tags: [learning]
+      operationId: listHomework
+      parameters: [{name: student_id, in: query, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: Домашние задания, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Homework'}}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}
+    post:
+      tags: [learning]
+      operationId: createHomework
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {$ref: '#/components/requestBodies/Homework'}
+      responses: {'201': {description: Задание создано, content: {application/json: {schema: {$ref: '#/components/schemas/Homework'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '422': {$ref: '#/components/responses/Unprocessable'}}
+  /homework/{id}:
+    patch:
+      tags: [learning]
+      operationId: updateHomework
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}, {$ref: '#/components/parameters/Version'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [text, due_date], properties: {text: {type: string, minLength: 1, maxLength: 10000}, due_date: {type: string, format: date}}}}}}
+      responses: {'200': {description: Задание изменено, content: {application/json: {schema: {$ref: '#/components/schemas/Homework'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}, '409': {$ref: '#/components/responses/Conflict'}}
+  /homework/{id}/publish:
+    post:
+      tags: [learning]
+      operationId: publishHomework
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}, {$ref: '#/components/parameters/Version'}]
+      responses: {'200': {description: Задание опубликовано, content: {application/json: {schema: {$ref: '#/components/schemas/Homework'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}, '409': {$ref: '#/components/responses/Conflict'}}
+  /homework/{id}/copy:
+    post:
+      tags: [learning]
+      operationId: copyHomework
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [due_date, status], properties: {due_date: {type: string, format: date}, status: {type: string, enum: [draft, published]}, student_ids: {type: array, maxItems: 100, uniqueItems: true, items: {type: string, format: uuid}}}}}}}
+      responses: {'201': {description: Задание скопировано, content: {application/json: {schema: {$ref: '#/components/schemas/Homework'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}, '422': {$ref: '#/components/responses/Unprocessable'}}
+  /homework/{id}/completion:
+    put:
+      tags: [learning]
+      operationId: setHomeworkCompletion
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [student_id, completed], properties: {student_id: {type: string, format: uuid}, completed: {type: boolean}}}}}}
+      responses: {'200': {description: Личная отметка сохранена, content: {application/json: {schema: {type: object, required: [completed], properties: {completed: {type: boolean}}}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}
+  /files:
+    post:
+      tags: [learning]
+      operationId: uploadFile
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {multipart/form-data: {schema: {type: object, required: [file, homework_id], properties: {homework_id: {type: string, format: uuid}, file: {type: string, format: binary}}}}}}
+      responses: {'201': {description: Файл загружен, content: {application/json: {schema: {$ref: '#/components/schemas/File'}}}}, '400': {$ref: '#/components/responses/BadRequest'}, '403': {$ref: '#/components/responses/Forbidden'}, '413': {$ref: '#/components/responses/TooLarge'}, '422': {$ref: '#/components/responses/Unprocessable'}}
+  /files/{id}:
+    get:
+      tags: [learning]
+      operationId: downloadFile
+      parameters: [{$ref: '#/components/parameters/ID'}, {name: student_id, in: query, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: Бинарное содержимое, content: {application/octet-stream: {schema: {type: string, format: binary}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}
+    delete:
+      tags: [learning]
+      operationId: archiveFile
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}]
+      responses: {'204': {description: Файл архивирован}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}
+  /announcements:
+    get:
+      tags: [content]
+      operationId: listAnnouncements
+      parameters: [{name: student_id, in: query, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: Объявления, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Announcement'}}}}}, '403': {$ref: '#/components/responses/Forbidden'}}
+    post:
+      tags: [content]
+      operationId: createAnnouncement
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [title, body, audience_type], properties: {title: {type: string, minLength: 1, maxLength: 300}, body: {type: string, minLength: 1, maxLength: 20000}, audience_type: {type: string, enum: [school, class, subject]}, class_id: {type: string, format: uuid}, subject_id: {type: string, format: uuid}}}}}}
+      responses: {'201': {description: Объявление создано, content: {application/json: {schema: {$ref: '#/components/schemas/Announcement'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '422': {$ref: '#/components/responses/Unprocessable'}}
+  /announcements/{id}:
+    delete:
+      tags: [content]
+      operationId: archiveAnnouncement
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}]
+      responses: {'204': {description: Объявление архивировано}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}
+  /notifications/digest:
+    get:
+      tags: [content]
+      operationId: getNotificationDigest
+      parameters: [{name: frequency, in: query, required: true, schema: {type: string, enum: [daily, weekly]}}]
+      responses: {'200': {description: Внутренняя сводка уведомлений, content: {application/json: {schema: {type: object, additionalProperties: true}}}}, '422': {$ref: '#/components/responses/Unprocessable'}}
+  /notifications:
+    get:
+      tags: [content]
+      operationId: listNotifications
+      parameters: [{$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Offset'}]
+      responses: {'200': {description: Уведомления, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Notification'}}}}}}
+  /notifications/{id}/read:
+    post:
+      tags: [content]
+      operationId: markNotificationRead
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}]
+      responses: {'204': {description: Прочитано}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}
+  /notification-preferences:
+    put:
+      tags: [content]
+      operationId: setNotificationPreferences
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [internal_enabled, digest_frequency], properties: {internal_enabled: {type: boolean}, digest_frequency: {type: string, enum: [never, daily, weekly]}, quiet_from: {type: string, format: time}, quiet_to: {type: string, format: time}}}}}}
+      responses: {'200': {description: Настройки сохранены, content: {application/json: {schema: {type: object, additionalProperties: true}}}}, '422': {$ref: '#/components/responses/Unprocessable'}}
+  /reports/classes/{id}:
+    get:
+      tags: [content]
+      operationId: classReport
+      parameters: [{$ref: '#/components/parameters/ID'}, {name: academic_period_id, in: query, required: true, schema: {type: string, format: uuid}}, {name: format, in: query, schema: {type: string, enum: [json, csv], default: json}}]
+      responses: {'200': {description: Отчёт класса или CSV, content: {application/json: {schema: {type: array, items: {type: object, additionalProperties: true}}}, text/csv: {schema: {type: string}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}
+  /reports/students/{id}:
+    get:
+      tags: [content]
+      operationId: studentReport
+      parameters: [{$ref: '#/components/parameters/ID'}, {name: academic_period_id, in: query, required: true, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: Успеваемость и посещаемость ученика, content: {application/json: {schema: {type: object, additionalProperties: true}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}
+  /reports/classes/{id}/attendance:
+    get:
+      tags: [content]
+      operationId: classAttendanceReport
+      parameters: [{$ref: '#/components/parameters/ID'}, {name: academic_period_id, in: query, required: true, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: Посещаемость класса, content: {application/json: {schema: {type: array, items: {type: object, additionalProperties: true}}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}
+  /reports/unfilled:
+    get:
+      tags: [content]
+      operationId: unfilledLessonsReport
+      parameters: [{name: academic_period_id, in: query, required: true, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: Незаполненные уроки, content: {application/json: {schema: {type: array, items: {type: object, additionalProperties: true}}}}}, '403': {$ref: '#/components/responses/Forbidden'}}
+  /reports/subjects/{id}:
+    get:
+      tags: [content]
+      operationId: subjectReport
+      parameters: [{$ref: '#/components/parameters/ID'}, {name: class_id, in: query, required: true, schema: {type: string, format: uuid}}, {name: academic_period_id, in: query, required: true, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: Сводка по предмету, content: {application/json: {schema: {type: array, items: {type: object, additionalProperties: true}}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}
+  /audit:
+    get:
+      tags: [administration]
+      operationId: listAudit
+      parameters: [{$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Offset'}, {name: entity_type, in: query, schema: {type: string}}, {name: entity_id, in: query, schema: {type: string, format: uuid}}, {name: actor_id, in: query, schema: {type: string, format: uuid}}, {name: action, in: query, schema: {type: string}}, {name: from, in: query, schema: {type: string, format: date-time}}, {name: to, in: query, schema: {type: string, format: date-time}}]
+      responses: {'200': {description: Записи аудита, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/AuditLog'}}}}}, '403': {$ref: '#/components/responses/Forbidden'}}
+  /users/{id}/reactivate:
+    post:
+      tags: [administration]
+      operationId: reactivateUser
+      summary: Вернуть деактивированного пользователя
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}]
+      responses:
+        '200': {description: Пользователь активен, content: {application/json: {schema: {$ref: '#/components/schemas/User'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /users/{id}/password-reset:
+    post:
+      tags: [administration]
+      operationId: resetUserPassword
+      summary: Выдать новый временный пароль (показывается один раз)
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}]
+      responses:
+        '200': {description: Временный пароль, content: {application/json: {schema: {$ref: '#/components/schemas/PasswordReset'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /users/{id}/revoke-sessions:
+    post:
+      tags: [administration]
+      operationId: revokeUserSessions
+      summary: Завершить все сеансы пользователя
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}]
+      responses:
+        '204': {description: Сеансы завершены}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /users/import:
+    post:
+      tags: [administration]
+      operationId: importUsers
+      summary: Массовое создание учеников и сотрудников с автоматическим зачислением
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/UserImportRequest'}}}}
+      responses:
+        '200': {description: Результат импорта или проверки, content: {application/json: {schema: {$ref: '#/components/schemas/UserImportResult'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+  /enrollments/bulk:
+    post:
+      tags: [administration]
+      operationId: bulkEnroll
+      summary: Зачислить нескольких учеников в класс
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/BulkEnrollRequest'}}}}
+      responses:
+        '200': {description: Итог зачисления, content: {application/json: {schema: {$ref: '#/components/schemas/BulkResult'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+  /classes/{id}/promote:
+    post:
+      tags: [administration]
+      operationId: promoteClass
+      summary: Перевести всех учеников класса в другой класс
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/PromoteClassRequest'}}}}
+      responses:
+        '200': {description: Итог перевода, content: {application/json: {schema: {$ref: '#/components/schemas/BulkResult'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+  /invitations:
+    get:
+      tags: [administration]
+      operationId: listInvitations
+      parameters: [{$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Offset'}]
+      responses:
+        '200': {description: Приглашения, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/Invitation'}}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      tags: [administration]
+      operationId: createInvitation
+      summary: Создать одноразовое приглашение для саморегистрации
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/InvitationInput'}}}}
+      responses:
+        '201': {description: Приглашение создано; код показывается один раз, content: {application/json: {schema: {$ref: '#/components/schemas/InvitationCreated'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+  /invitations/{id}:
+    delete:
+      tags: [administration]
+      operationId: revokeInvitation
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}]
+      responses:
+        '204': {description: Приглашение отозвано}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /invitations/lookup:
+    get:
+      tags: [auth]
+      operationId: lookupInvitation
+      summary: Проверить код приглашения (без входа в систему)
+      security: []
+      parameters: [{name: code, in: query, required: true, schema: {type: string, minLength: 8, maxLength: 64}}]
+      responses:
+        '200': {description: Сведения о приглашении, content: {application/json: {schema: {$ref: '#/components/schemas/InvitationLookup'}}}}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+  /auth/register:
+    post:
+      tags: [auth]
+      operationId: registerWithInvitation
+      summary: Регистрация по приглашению
+      security: []
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/RegisterRequest'}}}}
+      responses:
+        '201': {description: Учётная запись создана, content: {application/json: {schema: {$ref: '#/components/schemas/User'}}}}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+  /admin/schedule-entries:
+    get:
+      tags: [administration]
+      operationId: listAdminScheduleEntries
+      summary: Недельный шаблон расписания для редактирования
+      parameters:
+        - {name: class_id, in: query, schema: {type: string, format: uuid}}
+        - {name: teacher_id, in: query, schema: {type: string, format: uuid}}
+        - {name: academic_period_id, in: query, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Строки шаблона, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/ScheduleEntry'}}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /schedule-entries/{id}:
+    patch:
+      tags: [administration]
+      operationId: updateScheduleEntry
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ScheduleEntryUpdate'}}}}
+      responses:
+        '200': {description: Строка обновлена, content: {application/json: {schema: {$ref: '#/components/schemas/ScheduleEntry'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+    delete:
+      tags: [administration]
+      operationId: deleteScheduleEntry
+      summary: Удалить строку шаблона (созданные уроки сохраняются)
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}]
+      responses:
+        '204': {description: Строка удалена}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /schedule/generate:
+    post:
+      tags: [administration]
+      operationId: generateLessons
+      summary: Создать уроки по недельному шаблону на период дат
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/GenerateLessonsRequest'}}}}
+      responses:
+        '200': {description: Итог генерации, content: {application/json: {schema: {$ref: '#/components/schemas/GenerateLessonsResult'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+  /analytics/student:
+    get:
+      tags: [learning]
+      operationId: studentAnalytics
+      summary: Показатели ученика для дашборда ученика и родителя
+      parameters:
+        - {name: student_id, in: query, schema: {type: string, format: uuid}}
+        - {name: academic_period_id, in: query, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Аналитика, content: {application/json: {schema: {$ref: '#/components/schemas/StudentAnalytics'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /analytics/teacher:
+    get:
+      tags: [learning]
+      operationId: teacherAnalytics
+      summary: Показатели учителя по своим классам
+      parameters: [{name: academic_period_id, in: query, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: Аналитика, content: {application/json: {schema: {$ref: '#/components/schemas/TeacherAnalytics'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /analytics/school:
+    get:
+      tags: [administration]
+      operationId: schoolAnalytics
+      summary: Сводка по школе для администратора и руководителя
+      parameters: [{name: academic_period_id, in: query, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: Аналитика, content: {application/json: {schema: {$ref: '#/components/schemas/SchoolAnalytics'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /system/overview:
+    get:
+      tags: [administration]
+      operationId: systemOverview
+      summary: Нагрузка на систему и сервисы (только системный администратор)
+      responses:
+        '200': {description: Состояние системы, content: {application/json: {schema: {$ref: '#/components/schemas/SystemOverview'}}}}
+        '403': {$ref: '#/components/responses/Forbidden'}
+components:
+  securitySchemes:
+    sessionCookie: {type: apiKey, in: cookie, name: diary_session}
+  parameters:
+    ID: {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    CSRF: {name: X-CSRF-Token, in: header, required: true, schema: {type: string, minLength: 32}}
+    Version: {name: version, in: query, required: true, schema: {type: integer, minimum: 1}}
+    Idempotency: {name: Idempotency-Key, in: header, required: true, schema: {type: string, minLength: 8, maxLength: 128}}
+    Limit: {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 50}}
+    Offset: {name: offset, in: query, schema: {type: integer, minimum: 0, default: 0}}
+  requestBodies:
+    Login:
+      x-go-name: LoginPayload
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [login, password]
+            properties:
+              login: {type: string, minLength: 3, maxLength: 64}
+              password: {type: string, minLength: 1, maxLength: 128}
+    AcademicYear:
+      x-go-name: AcademicYearPayload
+      required: true
+      content: {application/json: {schema: {$ref: '#/components/schemas/AcademicYearInput'}}}
+    Named:
+      x-go-name: NamedPayload
+      required: true
+      content: {application/json: {schema: {type: object, required: [name], properties: {name: {type: string, minLength: 1, maxLength: 160}, short_name: {type: string, maxLength: 32}}}}}
+    Enrollment:
+      x-go-name: EnrollmentPayload
+      required: true
+      content: {application/json: {schema: {type: object, required: [student_id, class_id, starts_on], properties: {student_id: {type: string, format: uuid}, class_id: {type: string, format: uuid}, starts_on: {type: string, format: date}, ends_on: {type: string, format: date}}}}}
+    TeachingAssignment:
+      x-go-name: TeachingAssignmentPayload
+      required: true
+      content: {application/json: {schema: {type: object, required: [teacher_id, class_id, subject_id, academic_period_id, starts_on], properties: {teacher_id: {type: string, format: uuid}, class_id: {type: string, format: uuid}, subject_id: {type: string, format: uuid}, academic_period_id: {type: string, format: uuid}, starts_on: {type: string, format: date}, ends_on: {type: string, format: date}}}}}
+    Lesson:
+      x-go-name: LessonPayload
+      required: true
+      content: {application/json: {schema: {type: object, required: [lesson_date, starts_at, ends_at, class_id, subject_id, teacher_id, academic_period_id], properties: {lesson_date: {type: string, format: date}, starts_at: {type: string, format: date-time}, ends_at: {type: string, format: date-time}, class_id: {type: string, format: uuid}, subject_id: {type: string, format: uuid}, teacher_id: {type: string, format: uuid}, room_id: {type: string, format: uuid}, academic_period_id: {type: string, format: uuid}, topic: {type: string, maxLength: 1000}}}}}
+    Grade:
+      x-go-name: GradePayload
+      required: true
+      content: {application/json: {schema: {type: object, required: [student_id, lesson_work_id, value], properties: {student_id: {type: string, format: uuid}, lesson_work_id: {type: string, format: uuid}, value: {type: number, minimum: 0}, comment: {type: string, maxLength: 1000}}}}}
+    Attendance:
+      x-go-name: AttendancePayload
+      required: true
+      content: {application/json: {schema: {type: object, required: [lesson_id, student_id, status], properties: {lesson_id: {type: string, format: uuid}, student_id: {type: string, format: uuid}, status: {type: string, enum: [present, absent, late, excused, exempt]}, reason: {type: string, maxLength: 1000}, comment: {type: string, maxLength: 1000}}}}}
+    Homework:
+      x-go-name: HomeworkPayload
+      required: true
+      content: {application/json: {schema: {type: object, required: [class_id, subject_id, text, due_date, status], properties: {class_id: {type: string, format: uuid}, subject_id: {type: string, format: uuid}, lesson_id: {type: string, format: uuid}, text: {type: string, minLength: 1, maxLength: 10000}, due_date: {type: string, format: date}, status: {type: string, enum: [draft, published]}, student_ids: {type: array, maxItems: 100, uniqueItems: true, items: {type: string, format: uuid}}}}}}
+  responses:
+    LoginOK:
+      description: Вход выполнен
+      headers:
+        Set-Cookie: {description: HTTP-only session cookie, schema: {type: string}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/LoginResponse'}}}
+    UsersOK:
+      description: Пользователи
+      content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/User'}}}}
+    BadRequest: {description: Некорректный запрос, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}}
+    Unauthorized: {description: Не аутентифицирован, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}}
+    Forbidden: {description: Действие запрещено, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}}
+    NotFound: {description: Объект не существует или недоступен, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}}
+    Conflict: {description: "Конфликт версии, расписания или состояния", content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}}
+    TooLarge: {description: Превышен размер тела, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}}
+    Unprocessable: {description: Ошибка доменных данных, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}}
+    RateLimited: {description: Слишком много попыток, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}}
+    Internal: {description: Внутренняя ошибка, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}}
+  schemas:
+    SchoolSettings:
+      type: object
+      required: [school_name, timezone]
+      properties:
+        school_name: {type: string, minLength: 1, maxLength: 200}
+        timezone: {type: string, minLength: 1, maxLength: 64}
+    GradeScale:
+      type: object
+      required: [id, name, allowed_values, is_active]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        allowed_values: {type: array, items: {type: number}}
+        is_active: {type: boolean}
+    ScheduleEntryInput:
+      type: object
+      required: [class_id, subject_id, teacher_id, academic_period_id, weekday, lesson_number, starts_at, ends_at, valid_from]
+      properties:
+        class_id: {type: string, format: uuid}
+        subject_id: {type: string, format: uuid}
+        teacher_id: {type: string, format: uuid}
+        room_id: {type: string, format: uuid}
+        academic_period_id: {type: string, format: uuid}
+        weekday: {type: integer, minimum: 1, maximum: 7}
+        lesson_number: {type: integer, minimum: 1, maximum: 12}
+        starts_at: {type: string, pattern: '^[0-2][0-9]:[0-5][0-9]$'}
+        ends_at: {type: string, pattern: '^[0-2][0-9]:[0-5][0-9]$'}
+        valid_from: {type: string, format: date}
+        valid_to: {type: string, format: date}
+        week_parity: {type: integer, minimum: 0, maximum: 2, default: 0}
+    ScheduleEntry:
+      allOf:
+        - {$ref: '#/components/schemas/ScheduleEntryInput'}
+        - type: object
+          required: [id]
+          properties:
+            id: {type: string, format: uuid}
+            class_name: {type: string}
+            subject_name: {type: string}
+            room_name: {type: string, nullable: true}
+            teacher_name: {type: string}
+    CurrentLessons:
+      type: object
+      properties:
+        current: {$ref: '#/components/schemas/Lesson'}
+        next: {$ref: '#/components/schemas/Lesson'}
+    Role: {type: string, enum: [system_admin, administrator, teacher, class_teacher, student, parent, principal]}
+    ErrorResponse:
+      type: object
+      required: [code, message, request_id]
+      properties:
+        code: {type: string}
+        message: {type: string}
+        request_id: {type: string}
+        field_errors: {type: object, additionalProperties: {type: string}}
+    User:
+      type: object
+      required: [id, login, display_name, is_active, must_change_password, roles]
+      properties:
+        id: {type: string, format: uuid}
+        login: {type: string}
+        display_name: {type: string}
+        is_active: {type: boolean}
+        must_change_password: {type: boolean}
+        roles: {type: array, items: {$ref: '#/components/schemas/Role'}}
+        student_id: {type: string, format: uuid}
+        teacher_id: {type: string, format: uuid}
+        parent_id: {type: string, format: uuid}
+        last_login_at: {type: string, format: date-time, nullable: true}
+        class_name: {type: string, nullable: true}
+    LoginResponse:
+      allOf:
+        - {$ref: '#/components/schemas/User'}
+        - type: object
+          required: [csrf_token]
+          properties: {csrf_token: {type: string}}
+    Student:
+      type: object
+      required: [id, display_name]
+      properties:
+        id: {type: string, format: uuid}
+        display_name: {type: string}
+        student_code: {type: string, nullable: true}
+    AcademicYearInput:
+      type: object
+      required: [name, starts_on, ends_on]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 64}
+        starts_on: {type: string, format: date}
+        ends_on: {type: string, format: date}
+        is_current: {type: boolean, default: false}
+    AcademicYear:
+      allOf:
+        - {$ref: '#/components/schemas/AcademicYearInput'}
+        - type: object
+          required: [id]
+          properties: {id: {type: string, format: uuid}}
+    AcademicPeriod:
+      type: object
+      required: [id, academic_year_id, name, starts_on, ends_on, status, allow_late_edits]
+      properties:
+        id: {type: string, format: uuid}
+        academic_year_id: {type: string, format: uuid}
+        name: {type: string}
+        starts_on: {type: string, format: date}
+        ends_on: {type: string, format: date}
+        status: {type: string, enum: [open, closed]}
+        allow_late_edits: {type: boolean}
+    NamedEntity:
+      type: object
+      required: [id, name]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        short_name: {type: string, nullable: true}
+        academic_year_id: {type: string, format: uuid}
+    Enrollment:
+      type: object
+      required: [id, student_id, class_id, starts_on]
+      properties:
+        id: {type: string, format: uuid}
+        student_id: {type: string, format: uuid}
+        class_id: {type: string, format: uuid}
+        starts_on: {type: string, format: date}
+        ends_on: {type: string, format: date, nullable: true}
+        student_name: {type: string}
+        class_name: {type: string}
+    TeachingAssignment:
+      type: object
+      required: [id, teacher_id, class_id, subject_id, academic_period_id, starts_on]
+      properties:
+        id: {type: string, format: uuid}
+        teacher_id: {type: string, format: uuid}
+        teacher_name: {type: string}
+        class_id: {type: string, format: uuid}
+        class_name: {type: string}
+        subject_id: {type: string, format: uuid}
+        subject_name: {type: string}
+        academic_period_id: {type: string, format: uuid}
+        starts_on: {type: string, format: date}
+        ends_on: {type: string, format: date, nullable: true}
+    Lesson:
+      type: object
+      required: [id, lesson_date, starts_at, ends_at, class_id, subject_id, teacher_id, academic_period_id, topic, status, version]
+      properties:
+        id: {type: string, format: uuid}
+        lesson_date: {type: string, format: date}
+        starts_at: {type: string, format: date-time}
+        ends_at: {type: string, format: date-time}
+        class_id: {type: string, format: uuid}
+        class_name: {type: string}
+        subject_id: {type: string, format: uuid}
+        subject_name: {type: string}
+        teacher_id: {type: string, format: uuid}
+        room_id: {type: string, format: uuid, nullable: true}
+        room_name: {type: string, nullable: true}
+        academic_period_id: {type: string, format: uuid}
+        topic: {type: string}
+        status: {type: string, enum: [planned, completed, cancelled]}
+        cancellation_reason: {type: string, nullable: true}
+        version: {type: integer, minimum: 1}
+    JournalEntry:
+      type: object
+      required: [student_id, student_name, lesson_id, lesson_date, lesson_work_id, work_type, work_title, weight]
+      properties:
+        student_id: {type: string, format: uuid}
+        student_name: {type: string}
+        lesson_id: {type: string, format: uuid}
+        lesson_date: {type: string, format: date}
+        lesson_work_id: {type: string, format: uuid}
+        work_type: {type: string}
+        work_title: {type: string}
+        weight: {type: number}
+        grade_id: {type: string, format: uuid, nullable: true}
+        grade_value: {type: number, nullable: true}
+        grade_comment: {type: string, nullable: true}
+        grade_version: {type: integer, nullable: true}
+    LessonWork:
+      type: object
+      required: [id, lesson_id, work_type, title, weight, is_important, position]
+      properties:
+        id: {type: string, format: uuid}
+        lesson_id: {type: string, format: uuid}
+        work_type: {type: string, enum: [classwork, homework, test, quiz, project, oral]}
+        title: {type: string}
+        weight: {type: number}
+        is_important: {type: boolean}
+        position: {type: integer}
+    Grade:
+      type: object
+      required: [id, student_id, lesson_work_id, academic_period_id, value, version]
+      properties:
+        id: {type: string, format: uuid}
+        student_id: {type: string, format: uuid}
+        lesson_work_id: {type: string, format: uuid}
+        academic_period_id: {type: string, format: uuid}
+        value: {type: number}
+        comment: {type: string, nullable: true}
+        version: {type: integer}
+    GradeHistoryEntry:
+      type: object
+      required: [id, action, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        action: {type: string, description: 'grade.created, grade.updated или grade.deleted'}
+        actor_name: {type: string, nullable: true}
+        old_value: {type: number, nullable: true}
+        new_value: {type: number, nullable: true}
+        old_comment: {type: string, nullable: true}
+        new_comment: {type: string, nullable: true}
+        created_at: {type: string, format: date-time}
+    StudentGrade:
+      type: object
+      required: [id, subject_id, subject_name, lesson_date, work_type, value, version, weight]
+      properties:
+        id: {type: string, format: uuid}
+        subject_id: {type: string, format: uuid}
+        subject_name: {type: string}
+        lesson_date: {type: string, format: date}
+        work_type: {type: string}
+        value: {type: number}
+        comment: {type: string, nullable: true}
+        version: {type: integer}
+        weight: {type: number}
+    TermGrade:
+      type: object
+      required: [id, student_id, subject_id, academic_period_id, value, version]
+      properties:
+        id: {type: string, format: uuid}
+        student_id: {type: string, format: uuid}
+        subject_id: {type: string, format: uuid}
+        academic_period_id: {type: string, format: uuid}
+        value: {type: number}
+        version: {type: integer}
+    Attendance:
+      type: object
+      required: [lesson_id, student_id, status, version]
+      properties:
+        id: {type: string, format: uuid}
+        lesson_id: {type: string, format: uuid}
+        student_id: {type: string, format: uuid}
+        student_name: {type: string}
+        status: {type: string, enum: [present, absent, late, excused, exempt]}
+        reason: {type: string, nullable: true}
+        comment: {type: string, nullable: true}
+        version: {type: integer}
+    Homework:
+      type: object
+      required: [id, class_id, subject_id, text, due_date, status, version]
+      properties:
+        id: {type: string, format: uuid}
+        class_id: {type: string, format: uuid}
+        class_name: {type: string}
+        subject_id: {type: string, format: uuid}
+        subject_name: {type: string}
+        lesson_id: {type: string, format: uuid, nullable: true}
+        text: {type: string}
+        due_date: {type: string, format: date}
+        status: {type: string, enum: [draft, published]}
+        published_at: {type: string, format: date-time, nullable: true}
+        version: {type: integer}
+        completed: {type: boolean}
+        files: {type: array, items: {$ref: '#/components/schemas/File'}}
+    File:
+      type: object
+      required: [id, original_name, size_bytes, mime_type]
+      properties:
+        id: {type: string, format: uuid}
+        original_name: {type: string}
+        size_bytes: {type: integer, format: int64}
+        mime_type: {type: string}
+        created_at: {type: string, format: date-time}
+    Announcement:
+      type: object
+      required: [id, title, body, published_at]
+      properties:
+        id: {type: string, format: uuid}
+        title: {type: string}
+        body: {type: string}
+        published_at: {type: string, format: date-time}
+    Notification:
+      type: object
+      required: [id, kind, title, body, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {type: string}
+        title: {type: string}
+        body: {type: string}
+        entity_type: {type: string, nullable: true}
+        entity_id: {type: string, format: uuid, nullable: true}
+        read_at: {type: string, format: date-time, nullable: true}
+        created_at: {type: string, format: date-time}
+    AuditLog:
+      type: object
+      required: [id, action, entity_type, entity_id, request_id, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        actor_id: {type: string, format: uuid, nullable: true}
+        action: {type: string}
+        entity_type: {type: string}
+        entity_id: {type: string, format: uuid}
+        old_values: {type: object, nullable: true, additionalProperties: true}
+        new_values: {type: object, nullable: true, additionalProperties: true}
+        request_id: {type: string}
+        created_at: {type: string, format: date-time}
+    PasswordReset:
+      type: object
+      required: [password]
+      properties:
+        password: {type: string}
+    UserImportRow:
+      type: object
+      required: [display_name, role]
+      properties:
+        display_name: {type: string, minLength: 1, maxLength: 160}
+        role: {type: string, enum: [student, teacher, parent, principal]}
+        class_name: {type: string, maxLength: 64}
+        login: {type: string, maxLength: 64}
+    UserImportRequest:
+      type: object
+      required: [rows]
+      properties:
+        dry_run: {type: boolean, default: false}
+        academic_year_id: {type: string, format: uuid, description: Учебный год, в котором ищутся классы из строк; по умолчанию текущий}
+        rows: {type: array, minItems: 1, maxItems: 300, items: {$ref: '#/components/schemas/UserImportRow'}}
+    UserImportCreated:
+      type: object
+      required: [row, display_name, login, password, role]
+      properties:
+        row: {type: integer}
+        display_name: {type: string}
+        login: {type: string}
+        password: {type: string}
+        role: {type: string}
+        class_name: {type: string, nullable: true}
+    UserImportError:
+      type: object
+      required: [row, message]
+      properties:
+        row: {type: integer}
+        message: {type: string}
+    UserImportResult:
+      type: object
+      required: [dry_run, created, errors]
+      properties:
+        dry_run: {type: boolean}
+        created: {type: array, items: {$ref: '#/components/schemas/UserImportCreated'}}
+        errors: {type: array, items: {$ref: '#/components/schemas/UserImportError'}}
+    BulkEnrollRequest:
+      type: object
+      required: [student_ids, class_id, starts_on]
+      properties:
+        student_ids: {type: array, minItems: 1, maxItems: 500, uniqueItems: true, items: {type: string, format: uuid}}
+        class_id: {type: string, format: uuid}
+        starts_on: {type: string, format: date}
+    PromoteClassRequest:
+      type: object
+      required: [target_class_id, starts_on]
+      properties:
+        target_class_id: {type: string, format: uuid}
+        starts_on: {type: string, format: date}
+    BulkResult:
+      type: object
+      required: [processed, skipped]
+      properties:
+        processed: {type: integer}
+        skipped: {type: integer}
+    InvitationInput:
+      type: object
+      required: [role_codes]
+      properties:
+        role_codes: {type: array, minItems: 1, uniqueItems: true, items: {$ref: '#/components/schemas/Role'}}
+        note: {type: string, maxLength: 200}
+        class_id: {type: string, format: uuid}
+        student_id: {type: string, format: uuid}
+        ttl_hours: {type: integer, minimum: 1, maximum: 720, default: 168}
+    Invitation:
+      type: object
+      required: [id, role_codes, note, created_at, expires_at, status]
+      properties:
+        id: {type: string, format: uuid}
+        role_codes: {type: array, items: {$ref: '#/components/schemas/Role'}}
+        note: {type: string}
+        class_id: {type: string, format: uuid, nullable: true}
+        class_name: {type: string, nullable: true}
+        student_id: {type: string, format: uuid, nullable: true}
+        student_name: {type: string, nullable: true}
+        created_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        used_at: {type: string, format: date-time, nullable: true}
+        used_by_login: {type: string, nullable: true}
+        created_by_name: {type: string}
+        status: {type: string, enum: [open, used, expired, revoked]}
+    InvitationCreated:
+      type: object
+      required: [invitation, code]
+      properties:
+        invitation: {$ref: '#/components/schemas/Invitation'}
+        code: {type: string}
+    InvitationLookup:
+      type: object
+      required: [role_names, expires_at]
+      properties:
+        role_names: {type: array, items: {type: string}}
+        class_name: {type: string, nullable: true}
+        student_name: {type: string, nullable: true}
+        note: {type: string}
+        expires_at: {type: string, format: date-time}
+    RegisterRequest:
+      type: object
+      required: [code, login, display_name, password]
+      properties:
+        code: {type: string, minLength: 8, maxLength: 64}
+        login: {type: string, minLength: 3, maxLength: 64}
+        display_name: {type: string, minLength: 1, maxLength: 160}
+        password: {type: string, minLength: 12, maxLength: 128}
+    ScheduleEntryUpdate:
+      type: object
+      required: [teacher_id, weekday, lesson_number, starts_at, ends_at, valid_from]
+      properties:
+        teacher_id: {type: string, format: uuid}
+        room_id: {type: string, format: uuid, nullable: true}
+        weekday: {type: integer, minimum: 1, maximum: 7}
+        lesson_number: {type: integer, minimum: 1, maximum: 12}
+        starts_at: {type: string, pattern: '^[0-2][0-9]:[0-5][0-9]$'}
+        ends_at: {type: string, pattern: '^[0-2][0-9]:[0-5][0-9]$'}
+        valid_from: {type: string, format: date}
+        valid_to: {type: string, format: date, nullable: true}
+        week_parity: {type: integer, minimum: 0, maximum: 2, default: 0}
+    GenerateLessonsRequest:
+      type: object
+      required: [from, to]
+      properties:
+        from: {type: string, format: date}
+        to: {type: string, format: date}
+        class_id: {type: string, format: uuid}
+        skip_dates: {type: array, maxItems: 120, items: {type: string, format: date}}
+    GenerateLessonsResult:
+      type: object
+      required: [created, existing, conflicts]
+      properties:
+        created: {type: integer}
+        existing: {type: integer}
+        conflicts: {type: integer}
+    CarryOverRequest:
+      type: object
+      required: [from_period_id]
+      properties:
+        from_period_id: {type: string, format: uuid}
+        class_id: {type: string, format: uuid, description: Только этот класс; без поля — все классы}
+        target_class_id:
+          type: string
+          format: uuid
+          description: >-
+            Класс, которому достаются назначения и шаблон class_id (обязателен, если периоды из разных учебных лет:
+            классы относятся к году, и в новом году у класса другой идентификатор, например 5А → 6А)
+        include_schedule: {type: boolean, default: true, description: Переносить и недельный шаблон расписания}
+    CarryOverResult:
+      type: object
+      required: [assignments_created, assignments_skipped, entries_created, entries_skipped]
+      properties:
+        assignments_created: {type: integer}
+        assignments_skipped: {type: integer, description: На класс и предмет в периоде уже есть назначение}
+        entries_created: {type: integer}
+        entries_skipped: {type: integer, description: Слот занят или у учителя нет назначения в целевом периоде}
+    ValueCount:
+      type: object
+      required: [value, count]
+      properties:
+        value: {type: number}
+        count: {type: integer}
+    WeekAverage:
+      type: object
+      required: [week_start, average, grades_count]
+      properties:
+        week_start: {type: string, format: date}
+        average: {type: number}
+        grades_count: {type: integer}
+    SubjectAverage:
+      type: object
+      required: [subject_id, subject_name, grades_count]
+      properties:
+        subject_id: {type: string, format: uuid}
+        subject_name: {type: string}
+        average: {type: number, nullable: true}
+        grades_count: {type: integer}
+        term_value: {type: number, nullable: true}
+    RecentGrade:
+      type: object
+      required: [lesson_date, subject_name, title, work_type, value]
+      properties:
+        lesson_date: {type: string, format: date}
+        subject_name: {type: string}
+        title: {type: string}
+        work_type: {type: string}
+        value: {type: number}
+    HomeworkStats:
+      type: object
+      required: [done, open, overdue]
+      properties:
+        done: {type: integer}
+        open: {type: integer}
+        overdue: {type: integer}
+    UpcomingHomework:
+      type: object
+      required: [id, subject_name, text, due_date, completed]
+      properties:
+        id: {type: string, format: uuid}
+        subject_name: {type: string}
+        text: {type: string}
+        due_date: {type: string, format: date}
+        completed: {type: boolean}
+    StudentAnalytics:
+      type: object
+      required: [student_id, grades_count, lessons_marked, absences, late_count, subjects, dynamics, distribution, recent, homework, upcoming_homework]
+      properties:
+        student_id: {type: string, format: uuid}
+        period_id: {type: string, format: uuid, nullable: true}
+        period_name: {type: string, nullable: true}
+        average: {type: number, nullable: true}
+        grades_count: {type: integer}
+        attendance_rate: {type: number, nullable: true}
+        lessons_marked: {type: integer}
+        absences: {type: integer}
+        late_count: {type: integer}
+        subjects: {type: array, items: {$ref: '#/components/schemas/SubjectAverage'}}
+        dynamics: {type: array, items: {$ref: '#/components/schemas/WeekAverage'}}
+        distribution: {type: array, items: {$ref: '#/components/schemas/ValueCount'}}
+        recent: {type: array, items: {$ref: '#/components/schemas/RecentGrade'}}
+        homework: {$ref: '#/components/schemas/HomeworkStats'}
+        upcoming_homework: {type: array, items: {$ref: '#/components/schemas/UpcomingHomework'}}
+    TeacherClassStat:
+      type: object
+      required: [class_id, class_name, subject_id, subject_name, students]
+      properties:
+        class_id: {type: string, format: uuid}
+        class_name: {type: string}
+        subject_id: {type: string, format: uuid}
+        subject_name: {type: string}
+        students: {type: integer}
+        average: {type: number, nullable: true}
+        attendance_rate: {type: number, nullable: true}
+    LowPerformer:
+      type: object
+      required: [student_id, display_name, class_name, average, grades_count]
+      properties:
+        student_id: {type: string, format: uuid}
+        display_name: {type: string}
+        class_name: {type: string}
+        average: {type: number}
+        grades_count: {type: integer}
+    TeacherAnalytics:
+      type: object
+      required: [today_lessons, unmarked_past_lessons, unfilled_lessons, draft_homework, active_homework, classes, distribution, dynamics, low_performers]
+      properties:
+        period_id: {type: string, format: uuid, nullable: true}
+        period_name: {type: string, nullable: true}
+        today_lessons: {type: integer}
+        unmarked_past_lessons: {type: integer}
+        unfilled_lessons: {type: integer}
+        draft_homework: {type: integer}
+        active_homework: {type: integer}
+        classes: {type: array, items: {$ref: '#/components/schemas/TeacherClassStat'}}
+        distribution: {type: array, items: {$ref: '#/components/schemas/ValueCount'}}
+        dynamics: {type: array, items: {$ref: '#/components/schemas/WeekAverage'}}
+        low_performers: {type: array, items: {$ref: '#/components/schemas/LowPerformer'}}
+    SchoolCounts:
+      type: object
+      required: [students, teachers, parents, classes, subjects, users_active, users_inactive, pending_password_change, active_sessions, open_invitations]
+      properties:
+        students: {type: integer}
+        teachers: {type: integer}
+        parents: {type: integer}
+        classes: {type: integer}
+        subjects: {type: integer}
+        users_active: {type: integer}
+        users_inactive: {type: integer}
+        pending_password_change: {type: integer}
+        active_sessions: {type: integer}
+        open_invitations: {type: integer}
+    RoleCount:
+      type: object
+      required: [role, count]
+      properties:
+        role: {$ref: '#/components/schemas/Role'}
+        count: {type: integer}
+    ClassAttendance:
+      type: object
+      required: [class_id, class_name, students, present, absent]
+      properties:
+        class_id: {type: string, format: uuid}
+        class_name: {type: string}
+        students: {type: integer}
+        present: {type: integer}
+        absent: {type: integer}
+        rate: {type: number, nullable: true}
+    DayRate:
+      type: object
+      required: [day, rate]
+      properties:
+        day: {type: string, format: date}
+        rate: {type: number}
+    NamedAverage:
+      type: object
+      required: [id, name, average, grades_count]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        average: {type: number}
+        grades_count: {type: integer}
+    SchoolAlert:
+      type: object
+      required: [kind, severity, title, text, count]
+      properties:
+        kind: {type: string}
+        severity: {type: string, enum: [info, warning, danger]}
+        title: {type: string}
+        text: {type: string}
+        count: {type: integer}
+        link: {type: string, nullable: true}
+    ActivityItem:
+      type: object
+      required: [id, action, entity_type, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        action: {type: string}
+        entity_type: {type: string}
+        actor_name: {type: string, nullable: true}
+        created_at: {type: string, format: date-time}
+    SchoolAnalytics:
+      type: object
+      required: [counts, users_by_role, attendance_today, attendance_trend, grade_by_class, grade_by_subject, distribution, alerts, recent_activity]
+      properties:
+        period_id: {type: string, format: uuid, nullable: true}
+        period_name: {type: string, nullable: true}
+        counts: {$ref: '#/components/schemas/SchoolCounts'}
+        users_by_role: {type: array, items: {$ref: '#/components/schemas/RoleCount'}}
+        attendance_today: {type: array, items: {$ref: '#/components/schemas/ClassAttendance'}}
+        attendance_trend: {type: array, items: {$ref: '#/components/schemas/DayRate'}}
+        grade_by_class: {type: array, items: {$ref: '#/components/schemas/NamedAverage'}}
+        grade_by_subject: {type: array, items: {$ref: '#/components/schemas/NamedAverage'}}
+        distribution: {type: array, items: {$ref: '#/components/schemas/ValueCount'}}
+        alerts: {type: array, items: {$ref: '#/components/schemas/SchoolAlert'}}
+        recent_activity: {type: array, items: {$ref: '#/components/schemas/ActivityItem'}}
+    ServiceStatus:
+      type: object
+      required: [service, instance, version, status, started_at, last_seen_at, uptime_seconds, stats]
+      properties:
+        service: {type: string}
+        instance: {type: string}
+        version: {type: string}
+        status: {type: string, enum: [up, stale, down]}
+        started_at: {type: string, format: date-time}
+        last_seen_at: {type: string, format: date-time}
+        uptime_seconds: {type: integer}
+        stats: {type: object, additionalProperties: true}
+    PoolStats:
+      type: object
+      required: [max, acquired, idle, total]
+      properties:
+        max: {type: integer}
+        acquired: {type: integer}
+        idle: {type: integer}
+        total: {type: integer}
+    TableSize:
+      type: object
+      required: [name, size_bytes, rows_estimate]
+      properties:
+        name: {type: string}
+        size_bytes: {type: integer, format: int64}
+        rows_estimate: {type: integer, format: int64}
+    DatabaseOverview:
+      type: object
+      required: [version, size_bytes, connections, active_connections, max_connections, longest_query_seconds, cache_hit_ratio, xact_commit, xact_rollback, deadlocks, temp_files, started_at, pool, tables]
+      properties:
+        version: {type: string}
+        size_bytes: {type: integer, format: int64}
+        connections: {type: integer}
+        active_connections: {type: integer}
+        max_connections: {type: integer}
+        longest_query_seconds: {type: number}
+        cache_hit_ratio: {type: number, nullable: true}
+        xact_commit: {type: integer, format: int64}
+        xact_rollback: {type: integer, format: int64}
+        deadlocks: {type: integer, format: int64}
+        temp_files: {type: integer, format: int64}
+        started_at: {type: string, format: date-time}
+        pool: {$ref: '#/components/schemas/PoolStats'}
+        tables: {type: array, items: {$ref: '#/components/schemas/TableSize'}}
+    HostOverview:
+      type: object
+      required: [os, arch, num_cpu, go_version]
+      properties:
+        os: {type: string}
+        arch: {type: string}
+        num_cpu: {type: integer}
+        go_version: {type: string}
+        cpu_percent: {type: number, nullable: true}
+        memory_total: {type: integer, format: int64, nullable: true}
+        memory_used: {type: integer, format: int64, nullable: true}
+        disk_path: {type: string, nullable: true}
+        disk_total: {type: integer, format: int64, nullable: true}
+        disk_used: {type: integer, format: int64, nullable: true}
+    RouteStat:
+      type: object
+      required: [route, count, errors, p95_ms]
+      properties:
+        route: {type: string}
+        count: {type: integer}
+        errors: {type: integer}
+        p95_ms: {type: number}
+    HTTPOverview:
+      type: object
+      required: [requests_last_minute, requests_last_hour, error_rate, p50_ms, p95_ms, in_flight, routes]
+      properties:
+        requests_last_minute: {type: integer}
+        requests_last_hour: {type: integer}
+        error_rate: {type: number}
+        p50_ms: {type: number}
+        p95_ms: {type: number}
+        in_flight: {type: integer}
+        routes: {type: array, items: {$ref: '#/components/schemas/RouteStat'}}
+    StorageOverview:
+      type: object
+      required: [files_count, files_bytes]
+      properties:
+        files_count: {type: integer, format: int64}
+        files_bytes: {type: integer, format: int64}
+    MetricPoint:
+      type: object
+      required: [t, requests_per_minute, error_rate, p95_ms, goroutines, heap_mb, db_connections]
+      properties:
+        t: {type: string, format: date-time}
+        cpu_percent: {type: number, nullable: true}
+        memory_used_percent: {type: number, nullable: true}
+        requests_per_minute: {type: number}
+        error_rate: {type: number}
+        p95_ms: {type: number}
+        goroutines: {type: integer}
+        heap_mb: {type: number}
+        db_connections: {type: integer}
+    SystemOverview:
+      type: object
+      required: [generated_at, version, environment, uptime_seconds, services, database, host, http, storage, counts, series, operations]
+      properties:
+        generated_at: {type: string, format: date-time}
+        version: {type: string}
+        environment: {type: string}
+        uptime_seconds: {type: integer}
+        services: {type: array, items: {$ref: '#/components/schemas/ServiceStatus'}}
+        database: {$ref: '#/components/schemas/DatabaseOverview'}
+        host: {$ref: '#/components/schemas/HostOverview'}
+        http: {$ref: '#/components/schemas/HTTPOverview'}
+        storage: {$ref: '#/components/schemas/StorageOverview'}
+        counts: {$ref: '#/components/schemas/SchoolCounts'}
+        series: {type: array, items: {$ref: '#/components/schemas/MetricPoint'}}
+        operations: {$ref: '#/components/schemas/OperationsOverview'}
+    OperationsOverview:
+      type: object
+      required: [network_profile, tls_names]
+      properties:
+        network_profile: {type: string, enum: [local-http, https]}
+        last_backup_at: {type: string, format: date-time, nullable: true}
+        last_backup_size_bytes: {type: integer, format: int64, nullable: true}
+        last_backup_failure_at: {type: string, format: date-time, nullable: true}
+        last_backup_failure_reason: {type: string, nullable: true}
+        last_restore_at: {type: string, format: date-time, nullable: true}
+        tls_not_after: {type: string, format: date-time, nullable: true}
+        tls_days_left: {type: integer, nullable: true}
+        tls_names: {type: array, items: {type: string}}
+        tls_error: {type: string, nullable: true}

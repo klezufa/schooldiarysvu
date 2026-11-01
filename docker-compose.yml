@@ -1,0 +1,113 @@
+name: schooldiarysvu
+x-default-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-app-environment: &app-environment
+  APP_ENV: ${APP_ENV:-production}
+  NETWORK_PROFILE: ${NETWORK_PROFILE:-local-http}
+  DATABASE_URL: postgres://${POSTGRES_USER:-diary}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-diary}?sslmode=disable
+  SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+  FILE_STORAGE_PATH: /data/files
+  SCHOOL_TIMEZONE: ${SCHOOL_TIMEZONE:-Europe/Moscow}
+  # backend не опубликован наружу: запросы приходят только от nginx, который перезаписывает X-Real-IP.
+  TRUST_PROXY_HEADERS: "true"
+  # Не больше двух хешей паролей одновременно (2 × 64 МиБ): утренний наплыв входов иначе доводил backend до OOM.
+  PASSWORD_HASH_CONCURRENCY: ${PASSWORD_HASH_CONCURRENCY:-2}
+
+x-app-hardening: &app-hardening
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+  stop_grace_period: 30s
+  logging: *logging
+
+services:
+  postgres:
+    image: postgres:17.11-alpine3.24
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-diary}
+      POSTGRES_USER: ${POSTGRES_USER:-diary}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks: [internal]
+    # Порт PostgreSQL намеренно не публикуется на хост: доступ только из внутренней сети Compose.
+    mem_limit: 1g
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging: *logging
+
+  backend:
+    <<: *app-hardening
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.backend
+      args:
+        VERSION: ${DIARY_VERSION:-dev}
+    restart: unless-stopped
+    environment:
+      <<: *app-environment
+      # Сборщик мусора Go держит кучу ниже лимита контейнера, а не ждёт, пока его убьют по OOM.
+      GOMEMLIMIT: 400MiB
+    volumes:
+      - files-data:/data/files
+    networks: [internal]
+    mem_limit: 512m
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/app/healthcheck"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  # Фоновые задачи: очистка сессий и дедуплицированные уведомления. Запускается после миграций backend.
+  worker:
+    <<: *app-hardening
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.backend
+      args:
+        VERSION: ${DIARY_VERSION:-dev}
+    entrypoint: ["/app/worker"]
+    restart: unless-stopped
+    environment:
+      <<: *app-environment
+      GOMEMLIMIT: 200MiB
+    volumes:
+      - files-data:/data/files
+    networks: [internal]
+    mem_limit: 256m
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  nginx:
+    <<: *app-hardening
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    restart: unless-stopped
+    ports:
+      # По умолчанию только этот компьютер. Для доступа из школьной сети задайте BIND_ADDR=0.0.0.0 осознанно.
+      - "${BIND_ADDR:-127.0.0.1}:${HTTP_PORT:-8080}:8080"
+    networks: [internal]
+    mem_limit: 128m
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  files-data:
+networks:
+  internal:
+    driver: bridge
