@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
-import { KeyRound, LogOut, Pencil, RotateCcw, Search, UserMinus, UserPlus, Wand2 } from 'lucide-react'
+import { KeyRound, Link2, LogOut, Pencil, RotateCcw, Search, UserMinus, UserPlus, Wand2 } from 'lucide-react'
 import { ApiError, apiPage, mutation } from '../../api/client'
 import type { PasswordReset, Role, User } from '../../api/types'
 import { privilegedRoles, regularRoles, roleNames } from '../../api/types'
@@ -9,6 +9,8 @@ import { formatDate } from '../../lib/dates'
 import { useToast } from '../../components/toastContext'
 import { Field, Modal, QueryState, StatusBadge } from '../../components/UI'
 import { RolePills, SecretDialog } from './shared'
+import { ParentLinksDialog } from './ParentLinksDialog'
+import { useParentLinks } from './parentLinks'
 import { randomPassword, suggestLogin, useDirectory, useIsSystemAdmin } from './helpers'
 
 const pageSize = 25
@@ -157,6 +159,8 @@ export function PeopleAdmin({ startWithCreate = false }: { startWithCreate?: boo
   const [editing, setEditing] = useState<User | null>(null)
   const [secret, setSecret] = useState<Secret>(null)
   const [busy, setBusy] = useState('')
+  const [linking, setLinking] = useState<User | null>(null)
+  const { childrenOf, hasChildren } = useParentLinks()
   const term = useDebounced(search.trim())
   useEffect(() => setPage(0), [term, role, status, classId])
   const params = new URLSearchParams({ limit: String(pageSize), offset: String(page * pageSize), status })
@@ -233,7 +237,11 @@ export function PeopleAdmin({ startWithCreate = false }: { startWithCreate?: boo
                   <tr key={target.id}>
                     <td><div className="person"><span className="avatar" aria-hidden="true">{target.display_name.slice(0, 1)}</span><div><strong>{target.display_name}</strong><small>{target.login}</small></div></div></td>
                     <td><RolePills roles={target.roles} /></td>
-                    <td>{target.class_name ?? '—'}</td>
+                    <td>{target.parent_id ? (
+                      hasChildren(target.parent_id)
+                        ? <span className="linked-children">{childrenOf(target.parent_id).map((link) => `${link.student_name}${link.class_name ? ` (${link.class_name})` : ''}`).join(', ')}</span>
+                        : <StatusBadge tone="warning">Не связан с ребёнком</StatusBadge>
+                    ) : target.class_name ?? '—'}</td>
                     <td>{target.last_login_at ? formatDate(target.last_login_at, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : <span className="muted">не входил</span>}</td>
                     <td>
                       {!target.is_active ? <StatusBadge>Деактивирован</StatusBadge> : target.must_change_password ? <StatusBadge tone="warning">Временный пароль</StatusBadge> : <StatusBadge tone="success">Активен</StatusBadge>}
@@ -242,6 +250,7 @@ export function PeopleAdmin({ startWithCreate = false }: { startWithCreate?: boo
                       {manageable ? (
                         <div className="table-actions">
                           {target.is_active && <button className="icon-button" title="Изменить" aria-label={`Изменить ${target.display_name}`} onClick={() => setEditing(target)}><Pencil aria-hidden="true" /></button>}
+                          {target.is_active && target.parent_id && <button className="icon-button" title="Связать с ребёнком" aria-label={`Связать с ребёнком: ${target.display_name}`} onClick={() => setLinking(target)}><Link2 aria-hidden="true" /></button>}
                           {target.is_active && <button className="icon-button" title="Сбросить пароль" aria-label={`Сбросить пароль ${target.display_name}`} disabled={busy === `${target.id}:reset`} onClick={() => resetPassword(target)}><KeyRound aria-hidden="true" /></button>}
                           {target.is_active && <button className="icon-button" title="Завершить все сеансы" aria-label={`Завершить сеансы ${target.display_name}`} disabled={busy === `${target.id}:revoke`} onClick={() => revoke(target)}><LogOut aria-hidden="true" /></button>}
                           {target.is_active
@@ -275,6 +284,7 @@ export function PeopleAdmin({ startWithCreate = false }: { startWithCreate?: boo
       />
       <EditUserDialog user={editing} onClose={() => setEditing(null)} onSaved={async () => { setEditing(null); showToast('Изменения сохранены'); await refresh() }} />
       <SecretDialog secret={secret} onClose={() => setSecret(null)} />
+      <ParentLinksDialog parent={linking} onClose={() => setLinking(null)} />
     </section>
   )
 }

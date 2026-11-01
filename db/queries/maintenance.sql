@@ -141,7 +141,40 @@ UPDATE users SET display_name = $2, updated_at = now() WHERE id = $1 AND is_acti
 SELECT id, teacher_id, class_id, starts_on, ends_on FROM class_teachers ORDER BY starts_on DESC;
 
 -- name: ListParentStudentLinks :many
-SELECT parent_id, student_id, valid_from, valid_to FROM parent_student ORDER BY valid_from DESC;
+SELECT ps.parent_id, ps.student_id, ps.valid_from, ps.valid_to, pu.display_name AS parent_name, su.display_name AS student_name,
+       COALESCE(cls.name, '') AS class_name
+FROM parent_student ps
+JOIN parents p ON p.id = ps.parent_id JOIN users pu ON pu.id = p.user_id
+JOIN students s ON s.id = ps.student_id JOIN users su ON su.id = s.user_id
+LEFT JOIN LATERAL (
+    SELECT c.name FROM enrollments e JOIN classes c ON c.id = e.class_id
+    WHERE e.student_id = s.id AND e.starts_on <= school_today() AND (e.ends_on IS NULL OR e.ends_on >= school_today())
+    ORDER BY e.starts_on DESC LIMIT 1
+) cls ON true
+ORDER BY ps.valid_from DESC, su.display_name;
+
+-- name: GetParentName :one
+SELECT u.display_name FROM parents p JOIN users u ON u.id = p.user_id WHERE p.id = $1;
+
+-- name: ListStudentsForParentMatching :many
+-- Активные ученики с текущим классом, ещё не связанные с этим родителем: из них подбираются вероятные дети.
+SELECT s.id, u.display_name, COALESCE(cls.name, '') AS class_name
+FROM students s JOIN users u ON u.id = s.user_id AND u.is_active
+LEFT JOIN LATERAL (
+    SELECT c.name FROM enrollments e JOIN classes c ON c.id = e.class_id
+    WHERE e.student_id = s.id AND e.starts_on <= school_today() AND (e.ends_on IS NULL OR e.ends_on >= school_today())
+    ORDER BY e.starts_on DESC LIMIT 1
+) cls ON true
+WHERE NOT EXISTS (SELECT 1 FROM parent_student ps WHERE ps.parent_id = $1 AND ps.student_id = s.id
+                  AND (ps.valid_to IS NULL OR ps.valid_to >= school_today()))
+ORDER BY u.display_name;
+
+-- name: GetParentStudentLinkStart :one
+SELECT valid_from, valid_from >= school_today() AS removable FROM parent_student
+WHERE parent_id = $1 AND student_id = $2 AND valid_from = sqlc.arg(valid_from)::date;
+
+-- name: DeleteParentStudentLink :exec
+DELETE FROM parent_student WHERE parent_id = $1 AND student_id = $2 AND valid_from = sqlc.arg(valid_from)::date;
 
 -- name: ListDigestRecipients :many
 SELECT u.id, np.digest_frequency, np.quiet_from, np.quiet_to

@@ -514,6 +514,67 @@ test('simple mode: an administrator prepares a class from scratch, the new teach
   await parentContext.close()
 })
 
+test('a parent added without a child is told why there are no grades; the administrator links the suggested child and can undo it', async ({ page, browser }) => {
+  test.setTimeout(120_000)
+  await login(page, 'demo-admin', 'admin')
+  // Родитель и ученик заведены отдельно, как при импорте списка: связи между ними нет.
+  const csrf = (await page.context().cookies()).find((cookie) => cookie.name === 'diary_csrf')!.value
+  const classes = await (await page.request.get('/api/v1/classes')).json() as { id: string; name: string }[]
+  const stamp = Date.now().toString(36).slice(-4)
+  const temporary = `${initialPassword}-tmp-${stamp}`
+  const create = async (login: string, name: string, role: string, classId?: string) => {
+    const response = await page.request.post('/api/v1/users', { headers: { 'X-CSRF-Token': csrf },
+      data: { login, password: temporary, display_name: name, roles: [role], class_id: classId } })
+    expect(response.status()).toBe(201)
+  }
+  const childName = `Ершов${stamp} Пётр Владимирович`
+  const parentName = `Ершов${stamp} Владимир Олегович`
+  await create(`e2e-child-${stamp}`, childName, 'student', classes.find((item) => item.name === '5А')!.id)
+  await create(`e2e-father-${stamp}`, parentName, 'parent')
+
+  const parentContext = await browser.newContext({ baseURL: process.env.E2E_BASE_URL ?? 'http://127.0.0.1:5173' })
+  const parent = await parentContext.newPage()
+  await firstSignIn(parent, `e2e-father-${stamp}`, temporary, `${initialPassword}-father`)
+  await expect(parent.getByRole('heading', { name: 'Вы пока не связаны с ребёнком' })).toBeVisible()
+  await parent.goto('/grades')
+  await expect(parent.getByRole('heading', { name: 'Вы пока не связаны с ребёнком' })).toBeVisible()
+
+  // Простой режим: родитель среди «не связанных», подсказка объясняет, почему предложен именно этот ученик.
+  await page.goto('/admin')
+  await page.getByRole('navigation', { name: 'Задачи администратора' }).getByRole('button', { name: /Родители и дети/ }).click()
+  await page.getByRole('textbox', { name: /Поиск/ }).fill(`Ершов${stamp}`)
+  const row = page.locator('.simple-list li').filter({ hasText: parentName })
+  await expect(row).toContainText('Не связан с ребёнком')
+  await row.getByRole('button', { name: 'Связать с ребёнком' }).click()
+  const dialog = page.getByRole('dialog', { name: `Дети: ${parentName}` })
+  await expect(dialog.getByText('Родитель не связан с ребёнком.')).toBeVisible()
+  const suggestion = dialog.getByRole('list', { name: 'Подсказки' }).locator('li').first()
+  await expect(suggestion).toContainText(childName)
+  await expect(suggestion).toContainText('та же фамилия')
+  await expect(suggestion).toContainText('отчество от имени «Владимир»')
+  await suggestion.getByRole('button', { name: 'Связать' }).click()
+  await expect(dialog.getByRole('heading', { name: 'Связан с' })).toBeVisible()
+  await dialog.getByRole('button', { name: 'Готово' }).click()
+  await page.getByRole('checkbox', { name: /Только без ребёнка/ }).uncheck()
+  await expect(row).toContainText(`Дети: ${childName} (5А)`)
+
+  await parent.reload()
+  await expect(parent.getByRole('combobox', { name: 'Ребёнок' })).toContainText(childName)
+  await expect(parent.getByRole('heading', { name: 'Вы пока не связаны с ребёнком' })).toHaveCount(0)
+
+  // Расширенный режим: ребёнок в строке родителя; ошибочная сегодняшняя связь снимается сразу.
+  await page.goto('/admin?tab=people')
+  await page.getByPlaceholder('Например, Иванов').fill(`Ершов${stamp} Владимир`)
+  await expect(page.locator('tr').filter({ hasText: parentName })).toContainText(childName)
+  await page.getByRole('button', { name: `Связать с ребёнком: ${parentName}` }).click()
+  page.once('dialog', (confirm) => void confirm.accept())
+  await page.getByRole('dialog', { name: `Дети: ${parentName}` }).getByRole('button', { name: 'Отвязать' }).click()
+  await expect(page.getByRole('dialog', { name: `Дети: ${parentName}` }).getByText('Родитель не связан с ребёнком.')).toBeVisible()
+  await parent.reload()
+  await expect(parent.getByRole('heading', { name: 'Вы пока не связаны с ребёнком' })).toBeVisible()
+  await parentContext.close()
+})
+
 // Последним: перенос меняет данные II четверти. В новой четверти нет назначений, и предмет в шаблоне выбрать нельзя,
 // пока назначения и шаблон не перенесены из предыдущего периода.
 test('administrator carries assignments and the weekly template into a new period', async ({ page }) => {

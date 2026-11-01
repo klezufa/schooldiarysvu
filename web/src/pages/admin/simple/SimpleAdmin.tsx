@@ -1,10 +1,11 @@
-import { BookOpen, CalendarDays, Check, FileSpreadsheet, GraduationCap, KeyRound, Repeat, School, Users } from 'lucide-react'
+import { BookOpen, CalendarDays, Check, FileSpreadsheet, GraduationCap, KeyRound, Link2, Repeat, School, Users } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useAuth } from '../../../authContext'
 import { setupSteps, type SimpleView } from './setup'
 import { usePeriodEntries, useSchoolAnalytics, useSimpleData } from './data'
 import { ClassDetail, ClassesView } from './ClassesView'
 import { ScheduleView } from './ScheduleView'
+import { ParentsView } from './ParentsView'
 import { StudentsView } from './StudentsView'
 import { TeachersView } from './TeachersView'
 import { PasswordsView, SubjectsView } from './SubjectsView'
@@ -13,6 +14,7 @@ type Go = (view: SimpleView, classId?: string) => void
 
 const tiles: { view: SimpleView; icon: LucideIcon; title: string; text: string }[] = [
   { view: 'students', icon: GraduationCap, title: 'Ученики и родители', text: 'Добавить ученика вместе с родителем, перевести в другой класс' },
+  { view: 'parents', icon: Link2, title: 'Родители и дети', text: 'Связать родителя с ребёнком — без этого он не видит оценки' },
   { view: 'teachers', icon: Users, title: 'Учителя', text: 'Добавить учителя и указать, что он ведёт' },
   { view: 'classes', icon: School, title: 'Классы', text: 'Создать класс, назначить классного руководителя' },
   { view: 'schedule', icon: CalendarDays, title: 'Расписание', text: 'Поставить уроки в сетку недели' },
@@ -28,6 +30,7 @@ const alertViews: Record<string, { view: SimpleView; text: string }> = {
   unenrolled_students: { view: 'students', text: 'Без класса ученик не видит расписание и оценки. Нажмите «Другой класс» у ученика.' },
   teachers_without_assignments: { view: 'teachers', text: 'Учитель не увидит журнал, пока не указано, что он ведёт. Нажмите «Что ведёт».' },
   classes_without_class_teacher: { view: 'classes', text: 'Откройте класс и назначьте классного руководителя.' },
+  parents_without_children: { view: 'parents', text: 'Пока родитель не связан с ребёнком, он не видит оценки. Дневник подскажет подходящих учеников по фамилии и отчеству.' },
   pending_password_change: { view: 'passwords', text: 'Эти люди ещё ни разу не вошли со своим паролем. Если временный пароль потерялся — выдайте новый.' },
 }
 
@@ -111,6 +114,7 @@ function SimpleScreen({ view, classId, go, openAdvanced }: { view: SimpleView; c
   const home = () => go('')
   switch (view) {
     case 'students': return <StudentsView onBack={home} />
+    case 'parents': return <ParentsView onBack={home} />
     case 'teachers': return <TeachersView onBack={home} />
     case 'classes': return <ClassesView onBack={home} onOpen={(id) => go('class', id)} />
     case 'class': return classId ? <ClassDetail classId={classId} onBack={() => go('classes')} onSchedule={(id) => go('schedule', id)} /> : <ClassesView onBack={home} onOpen={(id) => go('class', id)} />

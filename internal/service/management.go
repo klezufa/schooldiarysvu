@@ -298,13 +298,6 @@ func (s *Service) ListClassTeachers(ctx context.Context, actor Principal) ([]db.
 	return s.queries.ListClassTeachers(ctx)
 }
 
-func (s *Service) ListParentStudentLinks(ctx context.Context, actor Principal) ([]db.ListParentStudentLinksRow, error) {
-	if err := actor.requireAdministrator(); err != nil {
-		return nil, err
-	}
-	return s.queries.ListParentStudentLinks(ctx)
-}
-
 func (s *Service) UpdateParentStudent(ctx context.Context, actor Principal, input api.LinkParentStudentJSONBody) error {
 	if err := actor.requireAdministrator(); err != nil {
 		return err

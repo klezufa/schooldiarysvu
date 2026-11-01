@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"fmt"
 	"math/big"
 	"net/http"
 	"net/url"
@@ -566,6 +567,99 @@ func TestDirectoryAndRelationsAdministration(t *testing.T) {
 	}
 	lesson["lesson_date"], lesson["starts_at"], lesson["ends_at"] = "2026-09-29", "2026-09-29T09:00:00Z", "2026-09-29T09:45:00Z"
 	teacher.request(http.MethodPost, "/api/v1/lessons", lesson, http.StatusCreated)
+}
+
+// Подбор детей для родителя (по фамилии и отчеству), связь и её исправление: ошибочная сегодняшняя связь удаляется
+// сразу, давнюю можно только завершить.
+func TestParentChildSuggestionsAndLinkRemoval(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL is not set")
+	}
+	f := newFixture(t)
+	admin := newAdmin(t, f)
+	teacher := newTestClient(t, f.server.URL)
+	teacher.login("teacher", teacherPassword)
+	ctx := context.Background()
+	person := func(login, name, role string, classID *uuid.UUID) userDTO {
+		body := map[string]any{"login": login, "password": otherPassword, "display_name": name, "roles": []string{role}}
+		if classID != nil {
+			body["class_id"] = *classID
+		}
+		var created userDTO
+		decodeResponse(t, admin.request(http.MethodPost, "/api/v1/users", body, http.StatusCreated), &created)
+		return created
+	}
+	father := person("ershov.vo", "Ершов Владимир Олегович", "parent", nil)
+	son := person("ershov.pv", "Ершов Пётр Владимирович", "student", &f.classID)
+	person("ershova.ai", "Ершова Анна Игоревна", "student", &f.classID)
+	person("kotov.gv", "Котов Глеб Владимирович", "student", nil)
+	person("morozov.ip", "Морозов Иван Петрович", "student", &f.classID)
+	var parentID, sonID uuid.UUID
+	mustTest(t, f.pool.QueryRow(ctx, "SELECT id FROM parents WHERE user_id = $1", father.ID).Scan(&parentID))
+	mustTest(t, f.pool.QueryRow(ctx, "SELECT id FROM students WHERE user_id = $1", son.ID).Scan(&sonID))
+
+	type suggestion struct {
+		StudentID   uuid.UUID `json:"student_id"`
+		DisplayName string    `json:"display_name"`
+		ClassName   *string   `json:"class_name"`
+		Reasons     []string  `json:"reasons"`
+	}
+	suggest := func() []suggestion {
+		var items []suggestion
+		decodeResponse(t, admin.request(http.MethodGet, "/api/v1/parent-student/suggestions?parent_id="+parentID.String(), nil, http.StatusOK), &items)
+		return items
+	}
+	got := suggest()
+	if len(got) != 3 || got[0].DisplayName != "Ершов Пётр Владимирович" || strings.Join(got[0].Reasons, ",") != "surname,patronymic" ||
+		got[1].DisplayName != "Котов Глеб Владимирович" || got[2].DisplayName != "Ершова Анна Игоревна" {
+		t.Fatalf("suggestions = %+v, want son (surname and patronymic), then by patronymic, then by surname", got)
+	}
+	if got[0].ClassName == nil || *got[0].ClassName != "5А" || got[1].ClassName != nil {
+		t.Fatalf("class names in suggestions = %v, %v", got[0].ClassName, got[1].ClassName)
+	}
+	teacher.request(http.MethodGet, "/api/v1/parent-student/suggestions?parent_id="+parentID.String(), nil, http.StatusForbidden)
+	admin.request(http.MethodGet, "/api/v1/parent-student/suggestions?parent_id="+uuid.NewString(), nil, http.StatusNotFound)
+
+	moscow, err := time.LoadLocation("Europe/Moscow")
+	mustTest(t, err)
+	today := time.Now().In(moscow).Format(time.DateOnly)
+	admin.request(http.MethodPost, "/api/v1/parent-student", map[string]any{"parent_id": parentID, "student_id": sonID, "valid_from": today}, http.StatusNoContent)
+	for _, item := range suggest() {
+		if item.StudentID == sonID {
+			t.Fatal("an already linked child is still suggested")
+		}
+	}
+	var links []struct {
+		ParentID    uuid.UUID `json:"parent_id"`
+		ParentName  string    `json:"parent_name"`
+		StudentName string    `json:"student_name"`
+		ClassName   *string   `json:"class_name"`
+	}
+	decodeResponse(t, admin.request(http.MethodGet, "/api/v1/parent-student", nil, http.StatusOK), &links)
+	found := false
+	for _, link := range links {
+		found = found || (link.ParentID == parentID && link.ParentName == "Ершов Владимир Олегович" && link.StudentName == "Ершов Пётр Владимирович" &&
+			link.ClassName != nil && *link.ClassName == "5А")
+	}
+	if !found {
+		t.Fatalf("links without names or class: %+v", links)
+	}
+
+	// Ошибочная связь, созданная сегодня, удаляется сразу — ждать конца дня с доступом к чужим оценкам нельзя.
+	removePath := fmt.Sprintf("/api/v1/parent-student?parent_id=%s&student_id=%s&valid_from=%s", parentID, sonID, today)
+	teacher.request(http.MethodDelete, removePath, nil, http.StatusForbidden)
+	admin.request(http.MethodDelete, removePath, nil, http.StatusNoContent)
+	admin.request(http.MethodDelete, removePath, nil, http.StatusNotFound)
+	var active, removed int
+	mustTest(t, f.pool.QueryRow(ctx, "SELECT count(*) FROM parent_student WHERE parent_id = $1", parentID).Scan(&active))
+	mustTest(t, f.pool.QueryRow(ctx, "SELECT count(*) FROM audit_logs WHERE action = 'parent_student.removed' AND entity_id = $1", sonID).Scan(&removed))
+	if active != 0 || removed != 1 {
+		t.Fatalf("after removal: links = %d (want 0), audit = %d (want 1)", active, removed)
+	}
+
+	// Давнюю связь удалить нельзя — только завершить.
+	admin.request(http.MethodPost, "/api/v1/parent-student", map[string]any{"parent_id": parentID, "student_id": sonID, "valid_from": "2026-09-01"}, http.StatusNoContent)
+	admin.request(http.MethodDelete, fmt.Sprintf("/api/v1/parent-student?parent_id=%s&student_id=%s&valid_from=2026-09-01", parentID, sonID), nil, http.StatusConflict)
 }
 
 // Изменение строки шаблона пересоздаёт её будущие незаполненные уроки по новым данным, удаление — убирает их.

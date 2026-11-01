@@ -169,6 +169,36 @@ func (a *API) updateParentStudent(w http.ResponseWriter, r *http.Request) {
 	respond(w, r, http.StatusNoContent, nil, err)
 }
 
+func (a *API) removeParentStudent(w http.ResponseWriter, r *http.Request) {
+	parentID, err := queryUUID(r, "parent_id", true)
+	if err != nil {
+		respond(w, r, 0, nil, err)
+		return
+	}
+	studentID, err := queryUUID(r, "student_id", true)
+	if err != nil {
+		respond(w, r, 0, nil, err)
+		return
+	}
+	validFrom, err := queryDate(r, "valid_from", true)
+	if err != nil {
+		respond(w, r, 0, nil, err)
+		return
+	}
+	err = a.service.RemoveParentStudent(r.Context(), principal(r.Context()), parentID, studentID, validFrom.Time)
+	respond(w, r, http.StatusNoContent, nil, err)
+}
+
+func (a *API) suggestChildren(w http.ResponseWriter, r *http.Request) {
+	parentID, err := queryUUID(r, "parent_id", true)
+	if err != nil {
+		respond(w, r, 0, nil, err)
+		return
+	}
+	result, err := a.service.SuggestChildren(r.Context(), principal(r.Context()), parentID)
+	respond(w, r, http.StatusOK, result, err)
+}
+
 func (a *API) getSchoolSettings(w http.ResponseWriter, r *http.Request) {
 	result, err := a.service.GetSchoolSettings(r.Context())
 	respond(w, r, http.StatusOK, result, err)

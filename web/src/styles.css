@@ -937,3 +937,15 @@ input:focus, select:focus, textarea:focus { border-color: #7aa2f2; outline: none
   .page-actions .mode-switch { width: 100%; }
   .mode-switch button { flex: 1; }
 }
+
+/* Связь родителя с ребёнком: подсказки в окне администратора и объяснение для родителя без связи. */
+.parent-links h3 { margin-bottom: .4rem; font-size: .95rem; }
+.reason-chips { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .3rem; }
+.linked-children { font-size: .82rem; }
+.unlinked-parent { display: flex; align-items: flex-start; gap: 1rem; max-width: 760px; }
+.unlinked-parent > svg { flex: none; width: 40px; height: 40px; padding: .5rem; border-radius: 12px; background: var(--warning-soft); color: var(--warning); }
+.unlinked-parent h2 { margin-bottom: .4rem; }
+.unlinked-parent p { margin: 0; color: var(--ink-2); line-height: 1.5; }
+.unlinked-parent-banner { margin-bottom: 1rem; }
+.unlinked-parent-banner h2 { margin-bottom: .2rem; font-size: .95rem; }
+.unlinked-parent-banner p { margin: 0; }

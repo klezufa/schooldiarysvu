@@ -39,7 +39,7 @@ export function StudentDashboard(): React.JSX.Element {
     enabled: Boolean(studentId),
   })
   if (isParent && !childrenLoading && !children.length) {
-    return <Empty title="К учётной записи не привязаны дети" text="Обратитесь к администратору школы: он свяжет вашу учётную запись с учётной записью ребёнка." />
+    return <Empty title="Вы пока не связаны с ребёнком" text="Оценки, расписание и задания появятся, как только администратор школы свяжет вашу учётную запись с учётной записью ребёнка." />
   }
   const data = analytics.data
   const active = lessons.data?.filter((lesson) => lesson.status !== 'cancelled') ?? []

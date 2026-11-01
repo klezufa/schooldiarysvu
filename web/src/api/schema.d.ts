@@ -309,6 +309,24 @@ export interface paths {
         get: operations["listParentStudentLinks"];
         put: operations["updateParentStudent"];
         post: operations["linkParentStudent"];
+        /** Удалить ошибочную связь, которая начинается сегодня или позже; действующую раньше связь можно только завершить (PUT), чтобы сохранилась история */
+        delete: operations["removeParentStudent"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/parent-student/suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Вероятные дети родителя — по фамилии и по отчеству, образованному от имени родителя; уже связанные не предлагаются */
+        get: operations["suggestChildrenForParent"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1403,6 +1421,27 @@ export interface components {
         };
         LoginResponse: components["schemas"]["User"] & {
             csrf_token: string;
+        };
+        ParentStudentLink: {
+            /** Format: uuid */
+            parent_id: string;
+            /** Format: uuid */
+            student_id: string;
+            /** Format: date */
+            valid_from: string;
+            /** Format: date */
+            valid_to?: string | null;
+            parent_name: string;
+            student_name: string;
+            class_name?: string | null;
+        };
+        ChildSuggestion: {
+            /** Format: uuid */
+            student_id: string;
+            display_name: string;
+            class_name?: string | null;
+            /** @description surname — та же фамилия (с учётом мужской и женской формы), patronymic — отчество ребёнка образовано от имени родителя */
+            reasons: ("surname" | "patronymic")[];
         };
         Student: {
             /** Format: uuid */
@@ -3083,15 +3122,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Связи родителей и учеников */
+            /** @description Связи родителей и учеников с именами и текущим классом ребёнка */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    }[];
+                    "application/json": components["schemas"]["ParentStudentLink"][];
                 };
             };
             403: components["responses"]["Forbidden"];
@@ -3166,6 +3203,57 @@ export interface operations {
             };
             403: components["responses"]["Forbidden"];
             422: components["responses"]["Unprocessable"];
+        };
+    };
+    removeParentStudent: {
+        parameters: {
+            query: {
+                parent_id: string;
+                student_id: string;
+                valid_from: string;
+            };
+            header: {
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Связь удалена */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    suggestChildrenForParent: {
+        parameters: {
+            query: {
+                parent_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Подсказки */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChildSuggestion"][];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     listChildren: {

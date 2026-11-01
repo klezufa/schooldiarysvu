@@ -47,6 +47,8 @@ func (a *API) registerAcademicRoutes(r chi.Router) {
 	r.With(a.authenticate).Get("/parent-student", a.listParentStudentLinks)
 	r.With(a.authenticate, a.requireCSRF).Post("/parent-student", a.linkParentStudent)
 	r.With(a.authenticate, a.requireCSRF).Put("/parent-student", a.updateParentStudent)
+	r.With(a.authenticate, a.requireCSRF).Delete("/parent-student", a.removeParentStudent)
+	r.With(a.authenticate).Get("/parent-student/suggestions", a.suggestChildren)
 	r.With(a.authenticate).Get("/children", a.listChildren)
 	r.With(a.authenticate).Get("/school/settings", a.getSchoolSettings)
 	r.With(a.authenticate, a.requireCSRF).Put("/school/settings", a.updateSchoolSettings)

@@ -65,6 +65,7 @@ type Querier interface {
 	DeactivateUser(ctx context.Context, id uuid.UUID) error
 	DeleteExpiredSessions(ctx context.Context) error
 	DeleteExpiredSessionsNow(ctx context.Context) error
+	DeleteParentStudentLink(ctx context.Context, arg DeleteParentStudentLinkParams) error
 	DeleteScheduleEntry(ctx context.Context, id uuid.UUID) error
 	// Будущие уроки строки шаблона, в которых ещё ничего нет: без темы, работ, посещаемости и заданий. Их удаляют при
 	// изменении или удалении строки, чтобы в расписании не оставались уроки по старому шаблону. Заполненные остаются.
@@ -100,6 +101,8 @@ type Querier interface {
 	GetLessonWork(ctx context.Context, id uuid.UUID) (GetLessonWorkRow, error)
 	GetNotificationPreferences(ctx context.Context, userID uuid.UUID) (GetNotificationPreferencesRow, error)
 	GetParentByUserID(ctx context.Context, userID uuid.UUID) (GetParentByUserIDRow, error)
+	GetParentName(ctx context.Context, id uuid.UUID) (string, error)
+	GetParentStudentLinkStart(ctx context.Context, arg GetParentStudentLinkStartParams) (GetParentStudentLinkStartRow, error)
 	GetScheduleEntry(ctx context.Context, id uuid.UUID) (GetScheduleEntryRow, error)
 	GetSchoolSettings(ctx context.Context) (GetSchoolSettingsRow, error)
 	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (GetSessionByTokenHashRow, error)
@@ -158,6 +161,8 @@ type Querier interface {
 	ListStudentLessons(ctx context.Context, arg ListStudentLessonsParams) ([]ListStudentLessonsRow, error)
 	ListStudentScheduleEntries(ctx context.Context, arg ListStudentScheduleEntriesParams) ([]ListStudentScheduleEntriesRow, error)
 	ListStudentWeekSchedule(ctx context.Context, arg ListStudentWeekScheduleParams) ([]ListStudentWeekScheduleRow, error)
+	// Активные ученики с текущим классом, ещё не связанные с этим родителем: из них подбираются вероятные дети.
+	ListStudentsForParentMatching(ctx context.Context, parentID uuid.UUID) ([]ListStudentsForParentMatchingRow, error)
 	ListSubjects(ctx context.Context) ([]ListSubjectsRow, error)
 	ListTeacherAnnouncements(ctx context.Context, arg ListTeacherAnnouncementsParams) ([]ListTeacherAnnouncementsRow, error)
 	ListTeacherHomework(ctx context.Context, authorID uuid.UUID) ([]ListTeacherHomeworkRow, error)

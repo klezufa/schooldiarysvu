@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Bell, LogOut, Menu, ShieldHalf, X } from 'lucide-react'
+import { Bell, Link2Off, LogOut, Menu, ShieldHalf, X } from 'lucide-react'
 import { api, mutation, queryString } from '../api/client'
 import type { Notification } from '../api/types'
 import { roleNames } from '../api/types'
@@ -70,9 +70,22 @@ const pageTitles: Record<string, string> = {
   '/admin': 'Администрирование', '/system': 'Состояние системы', '/settings': 'Профиль и настройки',
 }
 
+function UnlinkedParentNotice({ onlyParent }: { onlyParent: boolean }): React.JSX.Element {
+  return (
+    <section className={onlyParent ? 'panel unlinked-parent' : 'notice unlinked-parent-banner'} role="status">
+      <Link2Off aria-hidden="true" />
+      <div>
+        <h2>Вы пока не связаны с ребёнком</h2>
+        <p>Оценки, расписание и задания появятся здесь, как только администратор школы свяжет вашу учётную запись с учётной записью ребёнка.
+          Обратитесь к классному руководителю или администратору и назовите фамилию, имя и класс ребёнка.</p>
+      </div>
+    </section>
+  )
+}
+
 export function Layout(): React.JSX.Element {
   const { user, logout } = useAuth()
-  const { children, studentId, setStudentId } = useStudent()
+  const { children, studentId, setStudentId, noChildren } = useStudent()
   const [moreOpen, setMoreOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const navigate = useNavigate()
@@ -105,7 +118,7 @@ export function Layout(): React.JSX.Element {
             <strong>{pageTitles[location.pathname] ?? 'Школьный дневник'}</strong>
             <span>{formatDate(dateISO(), { weekday: 'long', day: 'numeric', month: 'long' })}</span>
           </div>
-          {user.roles.includes('parent') && (
+          {user.roles.includes('parent') && !noChildren && (
             <div className="child-switcher">
               <label htmlFor="child-select">Ребёнок</label>
               <select
@@ -129,7 +142,11 @@ export function Layout(): React.JSX.Element {
           </div>
           <button className="icon-button logout-button" onClick={signOut} aria-label="Выйти" title="Выйти"><LogOut aria-hidden="true" /></button>
         </header>
-        <main className="main-content" id="main-content"><Outlet /></main>
+        <main className="main-content" id="main-content">
+          {/* Родителю без связи с ребёнком нечего показать — объясняем почему на всех страницах, кроме настроек профиля. */}
+          {noChildren && location.pathname !== '/settings' ? <UnlinkedParentNotice onlyParent={user.roles.every((role) => role === 'parent')} /> : null}
+          {!noChildren || location.pathname === '/settings' || !user.roles.every((role) => role === 'parent') ? <Outlet /> : null}
+        </main>
       </div>
       <nav className="mobile-nav" aria-label="Мобильная навигация">
         {primary.map(({ to, label, icon: Icon }) => (

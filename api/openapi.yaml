@@ -261,7 +261,7 @@ paths:
     get:
       tags: [administration]
       operationId: listParentStudentLinks
-      responses: {'200': {description: Связи родителей и учеников, content: {application/json: {schema: {type: array, items: {type: object, additionalProperties: true}}}}}, '403': {$ref: '#/components/responses/Forbidden'}}
+      responses: {'200': {description: Связи родителей и учеников с именами и текущим классом ребёнка, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/ParentStudentLink'}}}}}, '403': {$ref: '#/components/responses/Forbidden'}}
     post:
       tags: [administration]
       operationId: linkParentStudent
@@ -274,6 +274,23 @@ paths:
       parameters: [{$ref: '#/components/parameters/CSRF'}]
       requestBody: {required: true, content: {application/json: {schema: {type: object, required: [parent_id, student_id, valid_from], properties: {parent_id: {type: string, format: uuid}, student_id: {type: string, format: uuid}, valid_from: {type: string, format: date}, valid_to: {type: string, format: date}}}}}}
       responses: {'204': {description: Связь обновлена}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}, '422': {$ref: '#/components/responses/Unprocessable'}}
+    delete:
+      tags: [administration]
+      operationId: removeParentStudent
+      summary: Удалить ошибочную связь, которая начинается сегодня или позже; действующую раньше связь можно только завершить (PUT), чтобы сохранилась история
+      parameters:
+        - {$ref: '#/components/parameters/CSRF'}
+        - {name: parent_id, in: query, required: true, schema: {type: string, format: uuid}}
+        - {name: student_id, in: query, required: true, schema: {type: string, format: uuid}}
+        - {name: valid_from, in: query, required: true, schema: {type: string, format: date}}
+      responses: {'204': {description: Связь удалена}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}, '409': {$ref: '#/components/responses/Conflict'}}
+  /parent-student/suggestions:
+    get:
+      tags: [administration]
+      operationId: suggestChildrenForParent
+      summary: Вероятные дети родителя — по фамилии и по отчеству, образованному от имени родителя; уже связанные не предлагаются
+      parameters: [{name: parent_id, in: query, required: true, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: Подсказки, лучшие первыми, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/ChildSuggestion'}}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}
   /children:
     get:
       tags: [learning]
@@ -993,6 +1010,28 @@ components:
         - type: object
           required: [csrf_token]
           properties: {csrf_token: {type: string}}
+    ParentStudentLink:
+      type: object
+      required: [parent_id, student_id, valid_from, parent_name, student_name]
+      properties:
+        parent_id: {type: string, format: uuid}
+        student_id: {type: string, format: uuid}
+        valid_from: {type: string, format: date}
+        valid_to: {type: string, format: date, nullable: true}
+        parent_name: {type: string}
+        student_name: {type: string}
+        class_name: {type: string, nullable: true}
+    ChildSuggestion:
+      type: object
+      required: [student_id, display_name, reasons]
+      properties:
+        student_id: {type: string, format: uuid}
+        display_name: {type: string}
+        class_name: {type: string, nullable: true}
+        reasons:
+          type: array
+          description: surname — та же фамилия (с учётом мужской и женской формы), patronymic — отчество ребёнка образовано от имени родителя
+          items: {type: string, enum: [surname, patronymic]}
     Student:
       type: object
       required: [id, display_name]

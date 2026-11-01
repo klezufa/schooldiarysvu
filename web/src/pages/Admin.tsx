@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { Archive, CalendarCog, GraduationCap, KeyRound, LayoutGrid, Pencil, Plus, ScrollText, ShieldAlert, Upload, Users, Workflow } from 'lucide-react'
 import { api, mutation, queryString } from '../api/client'
-import type { AcademicPeriod, AcademicYear, AuditLog, GradeScale, NamedEntity, SchoolSettings } from '../api/types'
+import type { AcademicPeriod, AcademicYear, AuditLog, GradeScale, NamedEntity, ParentStudentLink, SchoolSettings } from '../api/types'
 import { formatDate } from '../lib/dates'
 import { AdminForm, SaveButton, type FormField, type FormValues } from '../components/AdminForms'
 import { send } from '../lib/adminApi'
@@ -186,7 +186,7 @@ function AssignmentsAdmin(): React.JSX.Element {
   const parents = usePeople('parent')
   const { classes, classLabel, classOptions, openClasses } = useDirectory()
   const classTeachers = useQuery({ queryKey: ['class-teachers'], queryFn: () => api<EntityRow[]>('/class-teachers') })
-  const parentLinks = useQuery({ queryKey: ['parent-student'], queryFn: () => api<EntityRow[]>('/parent-student') })
+  const parentLinks = useQuery({ queryKey: ['parent-student'], queryFn: () => api<ParentStudentLink[]>('/parent-student') })
   const teacherOptions = teachers.data?.filter((user) => user.teacher_id).map((user) => ({ value: user.teacher_id!, label: user.display_name })) ?? []
   const studentOptions = students.data?.filter((user) => user.student_id).map((user) => ({ value: user.student_id!, label: `${user.display_name}${user.class_name ? `, ${user.class_name}` : ''}` })) ?? []
   const parentOptions = parents.data?.filter((user) => user.parent_id).map((user) => ({ value: user.parent_id!, label: user.display_name })) ?? []
@@ -217,7 +217,7 @@ function AssignmentsAdmin(): React.JSX.Element {
         <div className="entity-list">
           {parentLinks.data?.map((item, index) => (
             <div className="entity-row" key={`${item.parent_id}-${item.student_id}-${index}`}>
-              <div><strong>{label(parentOptions, item.parent_id)}</strong><small>ребёнок: {label(studentOptions, item.student_id)} · с {isoDate(item.valid_from)}{item.valid_to ? ` по ${isoDate(item.valid_to)}` : ' · действует'}</small></div>
+              <div><strong>{item.parent_name}</strong><small>ребёнок: {item.student_name}{item.class_name ? ` (${item.class_name})` : ''} · с {isoDate(item.valid_from)}{item.valid_to ? ` по ${isoDate(item.valid_to)}` : ' · действует'}</small></div>
               {!item.valid_to && <AdminForm fields={[{ name: 'valid_to', label: 'Действует до', type: 'date', required: true }]} submitLabel="Завершить связь"
                 onSubmit={async (values) => { await send('/parent-student', 'PUT', { parent_id: String(item.parent_id), student_id: String(item.student_id), valid_from: isoDate(item.valid_from), valid_to: values.valid_to }); await saved('parent-student') }} />}
             </div>
@@ -290,7 +290,7 @@ function AdvancedAdmin({ tab, select, startWithCreate }: { tab: Tab; select: (ta
   )
 }
 
-const simpleViews: SimpleView[] = ['students', 'teachers', 'classes', 'class', 'schedule', 'passwords', 'subjects']
+const simpleViews: SimpleView[] = ['students', 'parents', 'teachers', 'classes', 'class', 'schedule', 'passwords', 'subjects']
 
 export function AdminPage(): React.JSX.Element {
   const [params, setParams] = useSearchParams()

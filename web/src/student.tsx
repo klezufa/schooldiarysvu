@@ -24,7 +24,8 @@ export function StudentProvider({ children }: { children: ReactNode }): React.JS
     studentId: studentScope(user, selected), children: query.data ?? [],
     setStudentId: (id: string) => { setSelected(id); saveSelectedChild(id) },
     isLoading: isParent && query.isLoading,
-  }), [user, selected, query.data, isParent, query.isLoading])
+    noChildren: isParent && query.isSuccess && query.data.length === 0,
+  }), [user, selected, query.data, isParent, query.isLoading, query.isSuccess])
   return <StudentContext.Provider value={value}>{children}</StudentContext.Provider>
 }
 

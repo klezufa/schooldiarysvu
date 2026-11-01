@@ -165,6 +165,21 @@ func (q *Queries) CreateGradeScale(ctx context.Context, arg CreateGradeScalePara
 	return i, err
 }
 
+const deleteParentStudentLink = `-- name: DeleteParentStudentLink :exec
+DELETE FROM parent_student WHERE parent_id = $1 AND student_id = $2 AND valid_from = $3::date
+`
+
+type DeleteParentStudentLinkParams struct {
+	ParentID  uuid.UUID `json:"parent_id"`
+	StudentID uuid.UUID `json:"student_id"`
+	ValidFrom time.Time `json:"valid_from"`
+}
+
+func (q *Queries) DeleteParentStudentLink(ctx context.Context, arg DeleteParentStudentLinkParams) error {
+	_, err := q.db.Exec(ctx, deleteParentStudentLink, arg.ParentID, arg.StudentID, arg.ValidFrom)
+	return err
+}
+
 const enrollmentOverlapsExcept = `-- name: EnrollmentOverlapsExcept :one
 SELECT EXISTS (SELECT 1 FROM enrollments WHERE id <> $1 AND student_id = $2
  AND starts_on <= $4::date AND (ends_on IS NULL OR ends_on >= $3::date)) AS overlaps
@@ -228,6 +243,40 @@ func (q *Queries) GetEnrollment(ctx context.Context, id uuid.UUID) (GetEnrollmen
 		&i.StartsOn,
 		&i.EndsOn,
 	)
+	return i, err
+}
+
+const getParentName = `-- name: GetParentName :one
+SELECT u.display_name FROM parents p JOIN users u ON u.id = p.user_id WHERE p.id = $1
+`
+
+func (q *Queries) GetParentName(ctx context.Context, id uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getParentName, id)
+	var display_name string
+	err := row.Scan(&display_name)
+	return display_name, err
+}
+
+const getParentStudentLinkStart = `-- name: GetParentStudentLinkStart :one
+SELECT valid_from, valid_from >= school_today() AS removable FROM parent_student
+WHERE parent_id = $1 AND student_id = $2 AND valid_from = $3::date
+`
+
+type GetParentStudentLinkStartParams struct {
+	ParentID  uuid.UUID `json:"parent_id"`
+	StudentID uuid.UUID `json:"student_id"`
+	ValidFrom time.Time `json:"valid_from"`
+}
+
+type GetParentStudentLinkStartRow struct {
+	ValidFrom time.Time `json:"valid_from"`
+	Removable bool      `json:"removable"`
+}
+
+func (q *Queries) GetParentStudentLinkStart(ctx context.Context, arg GetParentStudentLinkStartParams) (GetParentStudentLinkStartRow, error) {
+	row := q.db.QueryRow(ctx, getParentStudentLinkStart, arg.ParentID, arg.StudentID, arg.ValidFrom)
+	var i GetParentStudentLinkStartRow
+	err := row.Scan(&i.ValidFrom, &i.Removable)
 	return i, err
 }
 
@@ -433,14 +482,27 @@ func (q *Queries) ListGradeScales(ctx context.Context) ([]ListGradeScalesRow, er
 }
 
 const listParentStudentLinks = `-- name: ListParentStudentLinks :many
-SELECT parent_id, student_id, valid_from, valid_to FROM parent_student ORDER BY valid_from DESC
+SELECT ps.parent_id, ps.student_id, ps.valid_from, ps.valid_to, pu.display_name AS parent_name, su.display_name AS student_name,
+       COALESCE(cls.name, '') AS class_name
+FROM parent_student ps
+JOIN parents p ON p.id = ps.parent_id JOIN users pu ON pu.id = p.user_id
+JOIN students s ON s.id = ps.student_id JOIN users su ON su.id = s.user_id
+LEFT JOIN LATERAL (
+    SELECT c.name FROM enrollments e JOIN classes c ON c.id = e.class_id
+    WHERE e.student_id = s.id AND e.starts_on <= school_today() AND (e.ends_on IS NULL OR e.ends_on >= school_today())
+    ORDER BY e.starts_on DESC LIMIT 1
+) cls ON true
+ORDER BY ps.valid_from DESC, su.display_name
 `
 
 type ListParentStudentLinksRow struct {
-	ParentID  uuid.UUID   `json:"parent_id"`
-	StudentID uuid.UUID   `json:"student_id"`
-	ValidFrom time.Time   `json:"valid_from"`
-	ValidTo   pgtype.Date `json:"valid_to"`
+	ParentID    uuid.UUID   `json:"parent_id"`
+	StudentID   uuid.UUID   `json:"student_id"`
+	ValidFrom   time.Time   `json:"valid_from"`
+	ValidTo     pgtype.Date `json:"valid_to"`
+	ParentName  string      `json:"parent_name"`
+	StudentName string      `json:"student_name"`
+	ClassName   string      `json:"class_name"`
 }
 
 func (q *Queries) ListParentStudentLinks(ctx context.Context) ([]ListParentStudentLinksRow, error) {
@@ -457,6 +519,9 @@ func (q *Queries) ListParentStudentLinks(ctx context.Context) ([]ListParentStude
 			&i.StudentID,
 			&i.ValidFrom,
 			&i.ValidTo,
+			&i.ParentName,
+			&i.StudentName,
+			&i.ClassName,
 		); err != nil {
 			return nil, err
 		}
@@ -531,6 +596,46 @@ func (q *Queries) ListStudentScheduleEntries(ctx context.Context, arg ListStuden
 			&i.ValidTo,
 			&i.WeekParity,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStudentsForParentMatching = `-- name: ListStudentsForParentMatching :many
+SELECT s.id, u.display_name, COALESCE(cls.name, '') AS class_name
+FROM students s JOIN users u ON u.id = s.user_id AND u.is_active
+LEFT JOIN LATERAL (
+    SELECT c.name FROM enrollments e JOIN classes c ON c.id = e.class_id
+    WHERE e.student_id = s.id AND e.starts_on <= school_today() AND (e.ends_on IS NULL OR e.ends_on >= school_today())
+    ORDER BY e.starts_on DESC LIMIT 1
+) cls ON true
+WHERE NOT EXISTS (SELECT 1 FROM parent_student ps WHERE ps.parent_id = $1 AND ps.student_id = s.id
+                  AND (ps.valid_to IS NULL OR ps.valid_to >= school_today()))
+ORDER BY u.display_name
+`
+
+type ListStudentsForParentMatchingRow struct {
+	ID          uuid.UUID `json:"id"`
+	DisplayName string    `json:"display_name"`
+	ClassName   string    `json:"class_name"`
+}
+
+// Активные ученики с текущим классом, ещё не связанные с этим родителем: из них подбираются вероятные дети.
+func (q *Queries) ListStudentsForParentMatching(ctx context.Context, parentID uuid.UUID) ([]ListStudentsForParentMatchingRow, error) {
+	rows, err := q.db.Query(ctx, listStudentsForParentMatching, parentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListStudentsForParentMatchingRow{}
+	for rows.Next() {
+		var i ListStudentsForParentMatchingRow
+		if err := rows.Scan(&i.ID, &i.DisplayName, &i.ClassName); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

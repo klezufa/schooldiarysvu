@@ -28,6 +28,12 @@ const (
 	AttendanceStatusPresent AttendanceStatus = "present"
 )
 
+// Defines values for ChildSuggestionReasons.
+const (
+	Patronymic ChildSuggestionReasons = "patronymic"
+	Surname    ChildSuggestionReasons = "surname"
+)
+
 // Defines values for HomeworkStatus.
 const (
 	HomeworkStatusDraft     HomeworkStatus = "draft"
@@ -282,6 +288,19 @@ type CarryOverResult struct {
 	// EntriesSkipped Слот занят или у учителя нет назначения в целевом периоде
 	EntriesSkipped int `json:"entries_skipped"`
 }
+
+// ChildSuggestion defines model for ChildSuggestion.
+type ChildSuggestion struct {
+	ClassName   *string `json:"class_name"`
+	DisplayName string  `json:"display_name"`
+
+	// Reasons surname — та же фамилия (с учётом мужской и женской формы), patronymic — отчество ребёнка образовано от имени родителя
+	Reasons   []ChildSuggestionReasons `json:"reasons"`
+	StudentId openapi_types.UUID       `json:"student_id"`
+}
+
+// ChildSuggestionReasons defines model for ChildSuggestion.Reasons.
+type ChildSuggestionReasons string
 
 // ClassAttendance defines model for ClassAttendance.
 type ClassAttendance struct {
@@ -629,6 +648,17 @@ type OperationsOverview struct {
 
 // OperationsOverviewNetworkProfile defines model for OperationsOverview.NetworkProfile.
 type OperationsOverviewNetworkProfile string
+
+// ParentStudentLink defines model for ParentStudentLink.
+type ParentStudentLink struct {
+	ClassName   *string             `json:"class_name"`
+	ParentId    openapi_types.UUID  `json:"parent_id"`
+	ParentName  string              `json:"parent_name"`
+	StudentId   openapi_types.UUID  `json:"student_id"`
+	StudentName string              `json:"student_name"`
+	ValidFrom   openapi_types.Date  `json:"valid_from"`
+	ValidTo     *openapi_types.Date `json:"valid_to"`
+}
 
 // PasswordReset defines model for PasswordReset.
 type PasswordReset struct {
@@ -1671,6 +1701,14 @@ type MarkNotificationReadParams struct {
 	XCSRFToken CSRF `json:"X-CSRF-Token"`
 }
 
+// RemoveParentStudentParams defines parameters for RemoveParentStudent.
+type RemoveParentStudentParams struct {
+	ParentId   openapi_types.UUID `form:"parent_id" json:"parent_id"`
+	StudentId  openapi_types.UUID `form:"student_id" json:"student_id"`
+	ValidFrom  openapi_types.Date `form:"valid_from" json:"valid_from"`
+	XCSRFToken CSRF               `json:"X-CSRF-Token"`
+}
+
 // LinkParentStudentJSONBody defines parameters for LinkParentStudent.
 type LinkParentStudentJSONBody struct {
 	ParentId  openapi_types.UUID  `json:"parent_id"`
@@ -1695,6 +1733,11 @@ type UpdateParentStudentJSONBody struct {
 // UpdateParentStudentParams defines parameters for UpdateParentStudent.
 type UpdateParentStudentParams struct {
 	XCSRFToken CSRF `json:"X-CSRF-Token"`
+}
+
+// SuggestChildrenForParentParams defines parameters for SuggestChildrenForParent.
+type SuggestChildrenForParentParams struct {
+	ParentId openapi_types.UUID `form:"parent_id" json:"parent_id"`
 }
 
 // ClassReportParams defines parameters for ClassReport.
