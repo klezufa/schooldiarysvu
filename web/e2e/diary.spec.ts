@@ -65,6 +65,19 @@ test('teacher edits a real grade and uses desktop journal without critical acces
   expect(errors).toEqual([])
 })
 
+test('without a session the site root opens the login page, also after signing out', async ({ page }) => {
+  // Раньше 401 от /me удалял из кеша сам этот запрос, и страница навсегда оставалась на «Проверяем сессию…».
+  await page.goto('/')
+  await expect(page).toHaveURL(/\/login$/)
+  await expect(page.getByRole('button', { name: 'Войти', exact: true })).toBeVisible()
+  await login(page, 'demo-student1', 'student')
+  await page.getByRole('button', { name: 'Выйти', exact: true }).click()
+  await expect(page).toHaveURL(/\/login$/)
+  await page.goto('/')
+  await expect(page).toHaveURL(/\/login$/)
+  await expect(page.getByText('Проверяем сессию…')).toHaveCount(0)
+})
+
 test('student loads real grades and toggles personal homework completion', async ({ page }) => {
   await login(page, 'demo-student1', 'student')
   await page.goto('/grades')

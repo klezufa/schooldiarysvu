@@ -39,7 +39,10 @@ export function AuthProvider({ children }: { children: ReactNode }): React.JSX.E
   useEffect(() => {
     const expired = () => {
       clearPrivateDrafts()
-      queryClient.clear()
+      // 401 часто приходит от самого /me, пока он ещё выполняется. Удалить его из кеша нельзя: TanStack Query
+      // молча отменит запрос, и ProtectedRoute навсегда останется на «Проверяем сессию…». Поэтому удаляем
+      // остальные данные, а /me помечаем как «пользователя нет» — страница сразу уходит на вход.
+      queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== 'me' })
       queryClient.setQueryData(['me'], null)
     }
     window.addEventListener('diary:unauthorized', expired)

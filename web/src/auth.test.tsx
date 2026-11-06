@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { act, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
-import { AuthProvider } from './auth'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { AuthProvider, ProtectedRoute } from './auth'
 import { useAuth } from './authContext'
 import { userFixture } from './test/fixtures'
 
@@ -36,5 +36,22 @@ describe('first login with a temporary password', () => {
     expect(await screen.findByText('ошибка')).toBeInTheDocument()
     await act(async () => { screen.getByRole('button', { name: 'change' }).click() })
     await waitFor(() => expect(screen.getByText('детей: 2')).toBeInTheDocument())
+  })
+})
+
+describe('opening a protected page without a session', () => {
+  it('redirects to the login page instead of checking the session forever', async () => {
+    // 401 от /me вызывает событие diary:unauthorized, пока сам запрос /me ещё не завершился. Раньше обработчик
+    // очищал весь кеш вместе с этим запросом, и страница навсегда оставалась на «Проверяем сессию…».
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(json({ code: 'unauthorized', message: 'Требуется вход' }, 401))))
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/']}><AuthProvider>
+      <Routes>
+        <Route path="/login" element={<p>страница входа</p>} />
+        <Route path="/" element={<ProtectedRoute><p>главная</p></ProtectedRoute>} />
+      </Routes>
+    </AuthProvider></MemoryRouter></QueryClientProvider>)
+    expect(await screen.findByText('страница входа')).toBeInTheDocument()
+    expect(screen.queryByText('главная')).not.toBeInTheDocument()
   })
 })
