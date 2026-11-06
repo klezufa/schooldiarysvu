@@ -17,3 +17,5 @@ deploy/tls/*.key
 deploy/tls/*.prev
 .DS_Store
 .local/
+# Вложения, которые сервер сохраняет в FILE_STORAGE_PATH по умолчанию (./data/files) при локальном запуске.
+/data/
