@@ -126,7 +126,7 @@ sudo systemctl enable --now docker
 ```bash
 sudo git clone https://github.com/klezufa/schooldiarysvu.git /opt/schooldiary
 cd /opt/schooldiary
-sudo git checkout pilot-2      # версия для пилота; не разворачивайте случайный коммит из main
+sudo git checkout "$(sudo git tag -l 'pilot-*' --sort=-v:refname | head -1)"   # последний выпуск пилота, а не случайный коммит из main
 ```
 
 В репозитории всё, что нужно серверу: `docker-compose.yml`, Dockerfile сервера и интерфейса, настройки Nginx
@@ -438,7 +438,7 @@ sudo docker compose up -d                     # поднять всё, что о
 cd /opt/schooldiary
 sudo bash scripts/backup.sh --quiesce --label pre-update
 sudo git fetch --tags
-sudo git checkout pilot-3                     # новый тег с исправлениями
+sudo git checkout "$(sudo git tag -l 'pilot-*' --sort=-v:refname | head -1)"   # самый новый выпуск пилота
 sudo DIARY_VERSION="$(git describe --tags --always)" docker compose build --pull
 sudo docker compose up -d
 sudo docker compose ps

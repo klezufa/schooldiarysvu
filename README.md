@@ -81,7 +81,7 @@
 >
 > ```bash
 > sudo git clone https://github.com/klezufa/schooldiarysvu.git /opt/schooldiary
-> cd /opt/schooldiary && sudo git checkout pilot-2
+> cd /opt/schooldiary && sudo git checkout "$(sudo git tag -l 'pilot-*' --sort=-v:refname | head -1)"
 > ```
 >
 > Образы собираются на сервере из исходников (`docker compose up -d --build`); PostgreSQL работает в контейнере,

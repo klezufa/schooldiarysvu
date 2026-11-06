@@ -93,7 +93,7 @@ node --version && npm --version     # v24.14.0
 ```bash
 sudo git clone https://github.com/klezufa/schooldiarysvu.git /opt/schooldiary
 cd /opt/schooldiary
-sudo git checkout pilot-2                          # выпуск для пилота, не случайный коммит из main
+sudo git checkout "$(sudo git tag -l 'pilot-*' --sort=-v:refname | head -1)"   # последний выпуск пилота, а не случайный коммит из main
 ```
 
 Интерфейс (2–5 минут):
@@ -325,7 +325,7 @@ curl -fsS http://192.168.10.20/health/ready ; echo
 cd /opt/schooldiary
 sudo bash -c 'set -a; . /etc/default/schooldiary; /opt/schooldiary/scripts/native-backup.sh --quiesce'
 sudo git fetch --tags
-sudo git checkout pilot-3                                     # новый выпуск
+sudo git checkout "$(sudo git tag -l 'pilot-*' --sort=-v:refname | head -1)"   # самый новый выпуск пилота
 (cd web && sudo npm ci && sudo npm run build)
 VERSION="$(sudo git describe --tags --always)"   # от root: репозиторий принадлежит root
 for cmd in server worker bootstrap-admin; do
