@@ -45,7 +45,7 @@ SELECT schedule_entry_id, lesson_date FROM lessons
 WHERE schedule_entry_id IS NOT NULL AND lesson_date BETWEEN sqlc.arg(from_date)::date AND sqlc.arg(to_date)::date;
 
 -- name: DeleteUntouchedFutureLessons :many
--- Будущие уроки строки шаблона, в которых ещё ничего нет: без темы, работ, посещаемости и заданий. Их удаляют при
+-- Будущие уроки строки шаблона, в которых ещё ничего нет: без темы, работ, посещаемости, заданий и замены. Их удаляют при
 -- изменении или удалении строки, чтобы в расписании не оставались уроки по старому шаблону. Заполненные остаются.
 DELETE FROM lessons l
 WHERE l.schedule_entry_id = sqlc.arg(schedule_entry_id) AND l.lesson_date >= school_today()
@@ -53,6 +53,7 @@ WHERE l.schedule_entry_id = sqlc.arg(schedule_entry_id) AND l.lesson_date >= sch
   AND NOT EXISTS (SELECT 1 FROM lesson_works w WHERE w.lesson_id = l.id)
   AND NOT EXISTS (SELECT 1 FROM attendance a WHERE a.lesson_id = l.id)
   AND NOT EXISTS (SELECT 1 FROM homework h WHERE h.lesson_id = l.id)
+  AND NOT EXISTS (SELECT 1 FROM lesson_substitutions ls WHERE ls.lesson_id = l.id)
 RETURNING l.lesson_date;
 
 -- name: ListCarryOverAssignments :many

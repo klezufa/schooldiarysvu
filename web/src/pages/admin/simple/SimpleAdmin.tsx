@@ -1,4 +1,4 @@
-import { BookOpen, CalendarDays, Check, FileSpreadsheet, GraduationCap, KeyRound, Link2, Repeat, School, Users } from 'lucide-react'
+import { BookOpen, CalendarDays, Check, FileArchive, FileSpreadsheet, GraduationCap, KeyRound, Link2, Repeat, Replace, School, Users } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useAuth } from '../../../authContext'
 import { setupSteps, type SimpleView } from './setup'
@@ -9,6 +9,9 @@ import { ParentsView } from './ParentsView'
 import { StudentsView } from './StudentsView'
 import { TeachersView } from './TeachersView'
 import { PasswordsView, SubjectsView } from './SubjectsView'
+import { BackToTasks } from './common'
+import { SubstitutionsPanel } from '../Substitutions'
+import { JournalArchivePanel } from '../../archive/ArchivePanel'
 
 type Go = (view: SimpleView, classId?: string) => void
 
@@ -18,8 +21,10 @@ const tiles: { view: SimpleView; icon: LucideIcon; title: string; text: string }
   { view: 'teachers', icon: Users, title: 'Учителя', text: 'Добавить учителя и указать, что он ведёт' },
   { view: 'classes', icon: School, title: 'Классы', text: 'Создать класс, назначить классного руководителя' },
   { view: 'schedule', icon: CalendarDays, title: 'Расписание', text: 'Поставить уроки в сетку недели' },
+  { view: 'substitutions', icon: Replace, title: 'Замены', text: 'Учитель заболел — дневник подскажет, кто свободен и может заменить' },
   { view: 'subjects', icon: BookOpen, title: 'Предметы и кабинеты', text: 'Список предметов, в том числе типовой' },
   { view: 'passwords', icon: KeyRound, title: 'Пароли и вход', text: 'Выдать новый пароль, если его забыли' },
+  { view: 'archive', icon: FileArchive, title: 'Архив журнала', text: 'Журнал класса за год — распечатать, подписать и сдать в архив' },
 ]
 
 /**
@@ -119,6 +124,8 @@ function SimpleScreen({ view, classId, go, openAdvanced }: { view: SimpleView; c
     case 'classes': return <ClassesView onBack={home} onOpen={(id) => go('class', id)} />
     case 'class': return classId ? <ClassDetail classId={classId} onBack={() => go('classes')} onSchedule={(id) => go('schedule', id)} /> : <ClassesView onBack={home} onOpen={(id) => go('class', id)} />
     case 'schedule': return <ScheduleView key={classId ?? ''} initialClassId={classId} onBack={home} />
+    case 'substitutions': return <><BackToTasks onBack={home} /><SubstitutionsPanel /></>
+    case 'archive': return <><BackToTasks onBack={home} /><JournalArchivePanel /></>
     case 'subjects': return <SubjectsView onBack={home} />
     case 'passwords': return <PasswordsView onBack={home} />
     default: return <Home go={go} openAdvanced={openAdvanced} />

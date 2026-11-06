@@ -314,6 +314,13 @@ func (s *Service) ListClassStudents(ctx context.Context, actor Principal, classI
 		if err != nil {
 			return nil, err
 		}
+		if !allowed {
+			// Заменяющий отмечает посещаемость и ставит оценки классу, в котором обычно не работает.
+			allowed, err = s.queries.TeacherSubstitutesInClass(ctx, db.TeacherSubstitutesInClassParams{TeacherID: *actor.TeacherID, ClassID: classID})
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 	if !allowed {
 		return nil, apperr.NotFound()

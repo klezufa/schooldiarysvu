@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
-import { Archive, CalendarCog, GraduationCap, KeyRound, LayoutGrid, Pencil, Plus, ScrollText, ShieldAlert, Upload, Users, Workflow } from 'lucide-react'
+import { Archive, CalendarCog, FileArchive, GraduationCap, KeyRound, LayoutGrid, Pencil, Plus, Replace, ScrollText, ShieldAlert, Upload, Users, Workflow } from 'lucide-react'
 import { api, mutation, queryString } from '../api/client'
 import type { AcademicPeriod, AcademicYear, AuditLog, GradeScale, NamedEntity, ParentStudentLink, SchoolSettings } from '../api/types'
 import { formatDate } from '../lib/dates'
@@ -17,6 +17,8 @@ import { InvitationsAdmin } from './admin/Invitations'
 import { EnrollmentAdmin } from './admin/Enrollment'
 import { ScheduleAdmin } from './admin/ScheduleAdmin'
 import { TeachingAssignmentsPanel } from './admin/TeachingAssignments'
+import { SubstitutionsPanel } from './admin/Substitutions'
+import { JournalArchivePanel } from './archive/ArchivePanel'
 import { options, useDirectory, useIsSystemAdmin, usePeople } from './admin/helpers'
 import { useAdminMode, type AdminMode } from './admin/mode'
 import { SimpleAdmin } from './admin/simple/SimpleAdmin'
@@ -31,7 +33,9 @@ const tabs = [
   { id: 'enrollment', label: 'Зачисление', icon: GraduationCap },
   { id: 'assignments', label: 'Назначения', icon: Workflow },
   { id: 'schedule', label: 'Расписание', icon: CalendarCog },
+  { id: 'substitutions', label: 'Замены', icon: Replace },
   { id: 'structure', label: 'Структура', icon: LayoutGrid },
+  { id: 'archive', label: 'Архив журнала', icon: FileArchive },
   { id: 'audit', label: 'Аудит', icon: ScrollText },
 ] as const
 type Tab = (typeof tabs)[number]['id']
@@ -283,14 +287,16 @@ function AdvancedAdmin({ tab, select, startWithCreate }: { tab: Tab; select: (ta
         {tab === 'enrollment' && <EnrollmentAdmin />}
         {tab === 'assignments' && <AssignmentsAdmin />}
         {tab === 'schedule' && <ScheduleAdmin />}
+        {tab === 'substitutions' && <SubstitutionsPanel />}
         {tab === 'structure' && <StructureAdmin />}
+        {tab === 'archive' && <JournalArchivePanel />}
         {tab === 'audit' && <AuditAdmin />}
       </div>
     </>
   )
 }
 
-const simpleViews: SimpleView[] = ['students', 'parents', 'teachers', 'classes', 'class', 'schedule', 'passwords', 'subjects']
+const simpleViews: SimpleView[] = ['students', 'parents', 'teachers', 'classes', 'class', 'schedule', 'substitutions', 'archive', 'passwords', 'subjects']
 
 export function AdminPage(): React.JSX.Element {
   const [params, setParams] = useSearchParams()
@@ -310,7 +316,7 @@ export function AdminPage(): React.JSX.Element {
   return (
     <div>
       <PageHeader eyebrow="Управление школой" title="Администрирование"
-        description={advanced ? 'Пользователи и роли, зачисление, назначения, расписание и учебная структура.' : 'Частые задачи — по шагам, без лишних настроек.'}
+        description={advanced ? 'Пользователи и роли, зачисление, назначения, расписание, замены, учебная структура и архив журнала.' : 'Частые задачи — по шагам, без лишних настроек.'}
         actions={
           <div className="segmented mode-switch" role="group" aria-label="Режим администрирования">
             <button type="button" aria-pressed={!advanced} className={advanced ? '' : 'active'} onClick={() => switchMode('simple')}>Простой режим</button>

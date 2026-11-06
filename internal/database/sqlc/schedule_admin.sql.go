@@ -29,10 +29,11 @@ WHERE l.schedule_entry_id = $1 AND l.lesson_date >= school_today()
   AND NOT EXISTS (SELECT 1 FROM lesson_works w WHERE w.lesson_id = l.id)
   AND NOT EXISTS (SELECT 1 FROM attendance a WHERE a.lesson_id = l.id)
   AND NOT EXISTS (SELECT 1 FROM homework h WHERE h.lesson_id = l.id)
+  AND NOT EXISTS (SELECT 1 FROM lesson_substitutions ls WHERE ls.lesson_id = l.id)
 RETURNING l.lesson_date
 `
 
-// Будущие уроки строки шаблона, в которых ещё ничего нет: без темы, работ, посещаемости и заданий. Их удаляют при
+// Будущие уроки строки шаблона, в которых ещё ничего нет: без темы, работ, посещаемости, заданий и замены. Их удаляют при
 // изменении или удалении строки, чтобы в расписании не оставались уроки по старому шаблону. Заполненные остаются.
 func (q *Queries) DeleteUntouchedFutureLessons(ctx context.Context, scheduleEntryID pgtype.UUID) ([]time.Time, error) {
 	rows, err := q.db.Query(ctx, deleteUntouchedFutureLessons, scheduleEntryID)

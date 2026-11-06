@@ -17,12 +17,14 @@ const AdminPage = lazy(() => import('./pages/Admin').then((module) => ({ default
 const SystemPage = lazy(() => import('./pages/SystemPage').then((module) => ({ default: module.SystemPage })))
 const RegisterPage = lazy(() => import('./pages/Register').then((module) => ({ default: module.RegisterPage })))
 const SettingsPage = lazy(() => import('./pages/Settings').then((module) => ({ default: module.SettingsPage })))
+const JournalArchivePage = lazy(() => import('./pages/archive/JournalArchivePage').then((module) => ({ default: module.JournalArchivePage })))
 
 export function App(): React.JSX.Element {
   return <Suspense fallback={<Loading label="Загружаем раздел…" />}><Routes>
     <Route path="/login" element={<LoginPage />} />
     <Route path="/register" element={<RegisterPage />} />
     <Route path="/password" element={<ProtectedRoute><PasswordPage /></ProtectedRoute>} />
+    <Route path="/archive/:classId" element={<ProtectedRoute><JournalArchivePage /></ProtectedRoute>} />
     <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
       <Route path="/today" element={<TodayPage />} />
       <Route path="/schedule" element={<SchedulePage />} />

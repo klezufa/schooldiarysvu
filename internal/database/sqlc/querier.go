@@ -29,6 +29,8 @@ type Querier interface {
 	AssignRole(ctx context.Context, arg AssignRoleParams) error
 	AttachHomeworkFile(ctx context.Context, arg AttachHomeworkFileParams) error
 	ClassAttendanceReport(ctx context.Context, arg ClassAttendanceReportParams) ([]ClassAttendanceReportRow, error)
+	// Ученики класса на дату и их родители, у которых включены уведомления.
+	ClassNotificationRecipients(ctx context.Context, arg ClassNotificationRecipientsParams) ([]uuid.UUID, error)
 	ClassReport(ctx context.Context, arg ClassReportParams) ([]ClassReportRow, error)
 	ClassTeacherHasClass(ctx context.Context, arg ClassTeacherHasClassParams) (bool, error)
 	ClassTeacherOverlaps(ctx context.Context, arg ClassTeacherOverlapsParams) (bool, error)
@@ -65,9 +67,10 @@ type Querier interface {
 	DeactivateUser(ctx context.Context, id uuid.UUID) error
 	DeleteExpiredSessions(ctx context.Context) error
 	DeleteExpiredSessionsNow(ctx context.Context) error
+	DeleteLessonSubstitution(ctx context.Context, lessonID uuid.UUID) error
 	DeleteParentStudentLink(ctx context.Context, arg DeleteParentStudentLinkParams) error
 	DeleteScheduleEntry(ctx context.Context, id uuid.UUID) error
-	// Будущие уроки строки шаблона, в которых ещё ничего нет: без темы, работ, посещаемости и заданий. Их удаляют при
+	// Будущие уроки строки шаблона, в которых ещё ничего нет: без темы, работ, посещаемости, заданий и замены. Их удаляют при
 	// изменении или удалении строки, чтобы в расписании не оставались уроки по старому шаблону. Заполненные остаются.
 	DeleteUntouchedFutureLessons(ctx context.Context, scheduleEntryID pgtype.UUID) ([]time.Time, error)
 	EndEnrollment(ctx context.Context, arg EndEnrollmentParams) error
@@ -82,9 +85,13 @@ type Querier interface {
 	FileVisibleToStudent(ctx context.Context, arg FileVisibleToStudentParams) (bool, error)
 	FileVisibleToTeacher(ctx context.Context, arg FileVisibleToTeacherParams) (bool, error)
 	FindClassByName(ctx context.Context, arg FindClassByNameParams) (FindClassByNameRow, error)
+	FindJournalArchiveIssue(ctx context.Context, code string) (FindJournalArchiveIssueRow, error)
 	GetAcademicPeriod(ctx context.Context, id uuid.UUID) (GetAcademicPeriodRow, error)
 	GetAcademicYear(ctx context.Context, id uuid.UUID) (GetAcademicYearRow, error)
 	GetAcademicYearIDForClass(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	// Учитель, который может вести урок: учётная запись активна и роль учителя не снята.
+	GetActiveTeacher(ctx context.Context, id uuid.UUID) (GetActiveTeacherRow, error)
+	GetArchiveClass(ctx context.Context, id uuid.UUID) (GetArchiveClassRow, error)
 	// Учебный год действующего класса: границы года ограничивают даты зачисления, назначений и шаблона.
 	GetClassAcademicYear(ctx context.Context, id uuid.UUID) (GetClassAcademicYearRow, error)
 	GetClassTeacher(ctx context.Context, id uuid.UUID) (ClassTeacher, error)
@@ -99,6 +106,7 @@ type Querier interface {
 	GetInvitationCreator(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	GetInvitationRoles(ctx context.Context, id uuid.UUID) ([]string, error)
 	GetLesson(ctx context.Context, id uuid.UUID) (GetLessonRow, error)
+	GetLessonSubstitution(ctx context.Context, lessonID uuid.UUID) (GetLessonSubstitutionRow, error)
 	GetLessonView(ctx context.Context, id uuid.UUID) (GetLessonViewRow, error)
 	GetLessonWork(ctx context.Context, id uuid.UUID) (GetLessonWorkRow, error)
 	GetNotificationPreferences(ctx context.Context, userID uuid.UUID) (GetNotificationPreferencesRow, error)
@@ -118,6 +126,8 @@ type Querier interface {
 	GradeAverages(ctx context.Context, arg GradeAveragesParams) (GradeAveragesRow, error)
 	HomeworkNotificationRecipients(ctx context.Context, id uuid.UUID) ([]uuid.UUID, error)
 	InsertMetricSample(ctx context.Context, arg InsertMetricSampleParams) error
+	// Учитель сейчас ведёт этот урок как замена.
+	IsLessonSubstitute(ctx context.Context, arg IsLessonSubstituteParams) (bool, error)
 	LatestMaintenanceEvent(ctx context.Context, arg LatestMaintenanceEventParams) (LatestMaintenanceEventRow, error)
 	LessonTimeConflict(ctx context.Context, arg LessonTimeConflictParams) (bool, error)
 	LinkParentStudent(ctx context.Context, arg LinkParentStudentParams) error
@@ -128,6 +138,13 @@ type Querier interface {
 	ListAllAcademicPeriods(ctx context.Context) ([]ListAllAcademicPeriodsRow, error)
 	ListAllAnnouncements(ctx context.Context) ([]ListAllAnnouncementsRow, error)
 	ListAnnouncementsForStudent(ctx context.Context, studentID uuid.UUID) ([]ListAnnouncementsForStudentRow, error)
+	ListArchiveAttendance(ctx context.Context, classID uuid.UUID) ([]ListArchiveAttendanceRow, error)
+	ListArchiveGrades(ctx context.Context, classID uuid.UUID) ([]ListArchiveGradesRow, error)
+	ListArchiveLessons(ctx context.Context, classID uuid.UUID) ([]ListArchiveLessonsRow, error)
+	ListArchivePeriods(ctx context.Context, academicYearID uuid.UUID) ([]ListArchivePeriodsRow, error)
+	// Все, кто учился в классе в этом году, включая выбывших: в архиве остаются и их оценки.
+	ListArchiveStudents(ctx context.Context, classID uuid.UUID) ([]ListArchiveStudentsRow, error)
+	ListArchiveTermGrades(ctx context.Context, arg ListArchiveTermGradesParams) ([]ListArchiveTermGradesRow, error)
 	ListAttendance(ctx context.Context, lessonID uuid.UUID) ([]ListAttendanceRow, error)
 	ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]AuditLog, error)
 	// Назначения, действующие на последний день периода: досрочно завершённые и назначения деактивированных учителей не переносятся.
@@ -166,6 +183,8 @@ type Querier interface {
 	// Активные ученики с текущим классом, ещё не связанные с этим родителем: из них подбираются вероятные дети.
 	ListStudentsForParentMatching(ctx context.Context, parentID uuid.UUID) ([]ListStudentsForParentMatchingRow, error)
 	ListSubjects(ctx context.Context) ([]ListSubjectsRow, error)
+	// Без учителя — все замены за период; с учителем — его уроки за период, и свои, и те, на которых его заменили.
+	ListSubstitutionLessons(ctx context.Context, arg ListSubstitutionLessonsParams) ([]ListSubstitutionLessonsRow, error)
 	ListTeacherAnnouncements(ctx context.Context, arg ListTeacherAnnouncementsParams) ([]ListTeacherAnnouncementsRow, error)
 	ListTeacherHomework(ctx context.Context, authorID uuid.UUID) ([]ListTeacherHomeworkRow, error)
 	ListTeacherLessons(ctx context.Context, arg ListTeacherLessonsParams) ([]ListTeacherLessonsRow, error)
@@ -202,6 +221,7 @@ type Querier interface {
 	SearchUsers(ctx context.Context, arg SearchUsersParams) ([]SearchUsersRow, error)
 	SetHomeworkCompletion(ctx context.Context, arg SetHomeworkCompletionParams) (SetHomeworkCompletionRow, error)
 	SetLateEdits(ctx context.Context, arg SetLateEditsParams) error
+	SetLessonTeacher(ctx context.Context, arg SetLessonTeacherParams) error
 	SoftDeleteGrade(ctx context.Context, arg SoftDeleteGradeParams) (SoftDeleteGradeRow, error)
 	StudentAttendanceCounts(ctx context.Context, arg StudentAttendanceCountsParams) ([]StudentAttendanceCountsRow, error)
 	StudentAttendanceReport(ctx context.Context, arg StudentAttendanceReportParams) ([]StudentAttendanceReportRow, error)
@@ -217,6 +237,9 @@ type Querier interface {
 	StudentUpcomingHomework(ctx context.Context, arg StudentUpcomingHomeworkParams) ([]StudentUpcomingHomeworkRow, error)
 	StudentWeeklyDynamics(ctx context.Context, arg StudentWeeklyDynamicsParams) ([]StudentWeeklyDynamicsRow, error)
 	SubjectReport(ctx context.Context, arg SubjectReportParams) ([]SubjectReportRow, error)
+	// Учителя, свободные во время урока, с признаками для выбора: ведёт этот предмет, работает с этим классом, сколько
+	// уроков у него в этот день. Заменённый и нынешний учитель урока не предлагаются.
+	SubstitutionCandidates(ctx context.Context, id uuid.UUID) ([]SubstitutionCandidatesRow, error)
 	TeacherAssignmentExists(ctx context.Context, arg TeacherAssignmentExistsParams) (bool, error)
 	TeacherCanGradeTerm(ctx context.Context, arg TeacherCanGradeTermParams) (bool, error)
 	TeacherClassStats(ctx context.Context, arg TeacherClassStatsParams) ([]TeacherClassStatsRow, error)
@@ -226,6 +249,9 @@ type Querier interface {
 	TeacherHomeworkCounts(ctx context.Context, arg TeacherHomeworkCountsParams) (TeacherHomeworkCountsRow, error)
 	TeacherLessonCounts(ctx context.Context, arg TeacherLessonCountsParams) (TeacherLessonCountsRow, error)
 	TeacherLowPerformers(ctx context.Context, arg TeacherLowPerformersParams) ([]TeacherLowPerformersRow, error)
+	TeacherSubstitutesInClass(ctx context.Context, arg TeacherSubstitutesInClassParams) (bool, error)
+	// Учитель заменял хотя бы на одном уроке этого журнала: ему нужен журнал, чтобы поставить оценки за свой урок.
+	TeacherSubstitutesInJournal(ctx context.Context, arg TeacherSubstitutesInJournalParams) (bool, error)
 	TeacherWeeklyDynamics(ctx context.Context, arg TeacherWeeklyDynamicsParams) ([]TeacherWeeklyDynamicsRow, error)
 	TeachingAssignmentOverlaps(ctx context.Context, arg TeachingAssignmentOverlapsParams) (bool, error)
 	TeachingAssignmentOverlapsExcept(ctx context.Context, arg TeachingAssignmentOverlapsExceptParams) (bool, error)
@@ -253,9 +279,11 @@ type Querier interface {
 	UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) (UpdateUserProfileRow, error)
 	UpsertAttendance(ctx context.Context, arg UpsertAttendanceParams) (UpsertAttendanceRow, error)
 	UpsertHeartbeat(ctx context.Context, arg UpsertHeartbeatParams) error
+	UpsertLessonSubstitution(ctx context.Context, arg UpsertLessonSubstitutionParams) error
 	UpsertNotificationPreferences(ctx context.Context, arg UpsertNotificationPreferencesParams) (UpsertNotificationPreferencesRow, error)
 	UpsertTermGrade(ctx context.Context, arg UpsertTermGradeParams) (UpsertTermGradeRow, error)
 	UserHasActiveAdministrator(ctx context.Context, userID uuid.UUID) (bool, error)
+	UserNotificationsEnabled(ctx context.Context, userID uuid.UUID) (bool, error)
 	UsersByRole(ctx context.Context) ([]UsersByRoleRow, error)
 }
 

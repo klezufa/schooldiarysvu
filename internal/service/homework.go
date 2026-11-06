@@ -224,7 +224,7 @@ func (s *Service) requireHomeworkAssignment(ctx context.Context, q *db.Queries, 
 		if dueDate.Before(lesson.LessonDate) {
 			return apperr.Unprocessable("Срок задания не может быть раньше урока")
 		}
-		if err := requireLessonWrite(ctx, q, actor, classID, subjectID, lesson.TeacherID, lesson.AcademicPeriodID, lesson.LessonDate); err != nil {
+		if err := requireLessonWrite(ctx, q, actor, lesson.ID, classID, subjectID, lesson.TeacherID, lesson.AcademicPeriodID, lesson.LessonDate); err != nil {
 			return err
 		}
 		return requireOpenPeriod(ctx, q, lesson.AcademicPeriodID, true)
@@ -248,7 +248,17 @@ func requireHomeworkOwner(ctx context.Context, q *db.Queries, actor Principal, h
 		return mapDatabaseError(err)
 	}
 	if err := requireTeacherAssignment(ctx, q, actor, homework.ClassID, homework.SubjectID, period.ID, homework.DueDate); err != nil {
-		return err
+		// Задание к уроку, который учитель провёл как замена: назначения на этот предмет у него нет.
+		if !homework.LessonID.Valid || actor.TeacherID == nil {
+			return err
+		}
+		substitute, subErr := q.IsLessonSubstitute(ctx, db.IsLessonSubstituteParams{LessonID: homework.LessonID.Bytes, TeacherID: *actor.TeacherID})
+		if subErr != nil {
+			return subErr
+		}
+		if !substitute {
+			return err
+		}
 	}
 	return requireOpenPeriod(ctx, q, period.ID, true)
 }

@@ -37,7 +37,7 @@ func (s *Service) GradeHistory(ctx context.Context, actor Principal, gradeID uui
 		if *actor.TeacherID != work.TeacherID {
 			return nil, apperr.NotFound()
 		}
-		if err := requireTeacherAssignment(ctx, s.queries, actor, work.ClassID, work.SubjectID, work.AcademicPeriodID, work.LessonDate); err != nil {
+		if err := requireLessonTeacher(ctx, s.queries, actor, work.LessonID, work.ClassID, work.SubjectID, work.AcademicPeriodID, work.LessonDate); err != nil {
 			return nil, err
 		}
 	}

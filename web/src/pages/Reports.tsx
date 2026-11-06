@@ -7,6 +7,7 @@ import { useAcademic } from '../hooks/useAcademic'
 import { PageHeader, QueryState } from '../components/UI'
 import { ReportTable } from '../components/ReportTable'
 import { useToast } from '../components/toastContext'
+import { JournalArchivePanel } from './archive/ArchivePanel'
 
 type ReportKind = 'class' | 'attendance' | 'unfilled' | 'subject'
 
@@ -31,5 +32,6 @@ export function ReportsPage({ classMode = false }: { classMode?: boolean }): Rea
   return <div><PageHeader eyebrow={classMode ? 'Классное руководство' : 'Аналитика школы'} title={classMode ? 'Мой класс' : 'Отчёты'} description="Сводки строятся по данным PostgreSQL за выбранный учебный период." actions={kind === 'class' ? <button className="button secondary" disabled={!classId || !periodId} onClick={exportCsv}><Download />Скачать CSV</button> : undefined} />
     <div className="toolbar report-filters">{!classMode && <div className="segmented" aria-label="Вид отчёта"><button className={kind === 'class' ? 'active' : ''} onClick={() => setKind('class')}>Успеваемость класса</button><button className={kind === 'attendance' ? 'active' : ''} onClick={() => setKind('attendance')}>Посещаемость</button><button className={kind === 'subject' ? 'active' : ''} onClick={() => setKind('subject')}>По предмету</button><button className={kind === 'unfilled' ? 'active' : ''} onClick={() => setKind('unfilled')}>Незаполненные уроки</button></div>}{kind !== 'unfilled' && <label>Класс<select value={classId} onChange={(event) => setClassId(event.target.value)}>{classes.data?.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}{kind === 'subject' && <label>Предмет<select value={subjectId} onChange={(event) => setSubjectId(event.target.value)}>{subjects.data?.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}<label>Учебный период<select value={periodId} onChange={(event) => setPeriodId(event.target.value)}>{periods.data?.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label></div>
     <section className="panel report-panel"><QueryState isLoading={report.isLoading && enabled} error={report.error} retry={report.refetch} isEmpty={!enabled} emptyTitle="Выберите параметры отчёта"><ReportTable data={report.data ?? []} /></QueryState></section>
+    <JournalArchivePanel />
   </div>
 }

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"time"
 
@@ -160,7 +161,7 @@ func (s *Service) UpdateLesson(ctx context.Context, actor Principal, lessonID uu
 		if err != nil {
 			return mapDatabaseError(err)
 		}
-		if err := requireLessonWrite(ctx, q, actor, lesson.ClassID, lesson.SubjectID, lesson.TeacherID, lesson.AcademicPeriodID, lesson.LessonDate); err != nil {
+		if err := requireLessonWrite(ctx, q, actor, lesson.ID, lesson.ClassID, lesson.SubjectID, lesson.TeacherID, lesson.AcademicPeriodID, lesson.LessonDate); err != nil {
 			return err
 		}
 		if err := requireOpenPeriod(ctx, q, lesson.AcademicPeriodID, true); err != nil {
@@ -192,6 +193,13 @@ func (s *Service) UpdateLesson(ctx context.Context, actor Principal, lessonID uu
 		assigned, err := q.TeacherAssignmentExists(ctx, db.TeacherAssignmentExistsParams{TeacherID: teacherID, ClassID: lesson.ClassID, SubjectID: lesson.SubjectID, AcademicPeriodID: lesson.AcademicPeriodID, Column5: lessonDate})
 		if err != nil {
 			return err
+		}
+		if !assigned && teacherID == lesson.TeacherID {
+			// Урок ведёт замена: назначения на предмет у заменяющего нет, и оно не нужно.
+			assigned, err = q.IsLessonSubstitute(ctx, db.IsLessonSubstituteParams{LessonID: lessonID, TeacherID: teacherID})
+			if err != nil {
+				return err
+			}
 		}
 		if !assigned {
 			return apperr.Unprocessable("Новый учитель не назначен на класс, предмет и дату урока")
@@ -236,7 +244,7 @@ func mapLesson(row db.GetLessonViewRow) api.Lesson {
 		ClassId: row.ClassID, ClassName: &className, SubjectId: row.SubjectID, SubjectName: &subjectName,
 		TeacherId: row.TeacherID, RoomId: uuidPointer(row.RoomID), RoomName: textPointer(row.RoomName),
 		AcademicPeriodId: row.AcademicPeriodID, Topic: row.Topic, Status: api.LessonStatus(row.Status),
-		CancellationReason: textPointer(row.CancellationReason), Version: int(row.Version)}
+		CancellationReason: textPointer(row.CancellationReason), Version: int(row.Version), OriginalTeacherName: textPointer(row.OriginalTeacherName)}
 }
 
 func validateLessonTimes(date time.Time, startsAt, endsAt time.Time) error {
@@ -270,14 +278,32 @@ func checkLessonConflict(ctx context.Context, q *db.Queries, lessonID uuid.UUID,
 	return nil
 }
 
-func requireLessonWrite(ctx context.Context, q *db.Queries, actor Principal, classID, subjectID, teacherID, periodID uuid.UUID, onDate time.Time) error {
+func requireLessonWrite(ctx context.Context, q *db.Queries, actor Principal, lessonID, classID, subjectID, teacherID, periodID uuid.UUID, onDate time.Time) error {
 	if actor.IsAdministrator() {
 		return nil
 	}
 	if actor.TeacherID == nil || *actor.TeacherID != teacherID {
 		return apperr.NotFound()
 	}
-	return requireTeacherAssignment(ctx, q, actor, classID, subjectID, periodID, onDate)
+	return requireLessonTeacher(ctx, q, actor, lessonID, classID, subjectID, periodID, onDate)
+}
+
+// requireLessonTeacher пропускает учителя, назначенного на класс и предмет урока, и заменяющего: замену назначают
+// на один урок, и вести его (тему, посещаемость, работы, оценки) можно без назначения на этот предмет.
+func requireLessonTeacher(ctx context.Context, q *db.Queries, actor Principal, lessonID, classID, subjectID, periodID uuid.UUID, onDate time.Time) error {
+	err := requireTeacherAssignment(ctx, q, actor, classID, subjectID, periodID, onDate)
+	var appErr *apperr.Error
+	if err == nil || !errors.As(err, &appErr) || actor.TeacherID == nil {
+		return err
+	}
+	substitute, subErr := q.IsLessonSubstitute(ctx, db.IsLessonSubstituteParams{LessonID: lessonID, TeacherID: *actor.TeacherID})
+	if subErr != nil {
+		return subErr
+	}
+	if substitute {
+		return nil
+	}
+	return err
 }
 
 func requireLessonRead(ctx context.Context, q *db.Queries, actor Principal, lesson db.GetLessonViewRow) error {
@@ -285,7 +311,17 @@ func requireLessonRead(ctx context.Context, q *db.Queries, actor Principal, less
 		return nil
 	}
 	if actor.TeacherID != nil && *actor.TeacherID == lesson.TeacherID {
-		return requireTeacherAssignment(ctx, q, actor, lesson.ClassID, lesson.SubjectID, lesson.AcademicPeriodID, lesson.LessonDate)
+		return requireLessonTeacher(ctx, q, actor, lesson.ID, lesson.ClassID, lesson.SubjectID, lesson.AcademicPeriodID, lesson.LessonDate)
+	}
+	// Учитель по расписанию видит урок, который за него провела замена: это его предмет и его журнал.
+	if actor.TeacherID != nil && lesson.OriginalTeacherName.Valid {
+		substitution, err := q.GetLessonSubstitution(ctx, lesson.ID)
+		if err != nil && !isNoRows(err) {
+			return err
+		}
+		if err == nil && substitution.OriginalTeacherID == *actor.TeacherID {
+			return requireTeacherAssignment(ctx, q, actor, lesson.ClassID, lesson.SubjectID, lesson.AcademicPeriodID, lesson.LessonDate)
+		}
 	}
 	if actor.HasRole("class_teacher") {
 		allowed, err := q.ClassTeacherHasClass(ctx, db.ClassTeacherHasClassParams{UserID: actor.UserID, ClassID: lesson.ClassID, Column3: lesson.LessonDate})

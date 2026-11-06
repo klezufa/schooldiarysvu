@@ -48,6 +48,13 @@ const (
 	InvitationStatusUsed    InvitationStatus = "used"
 )
 
+// Defines values for JournalArchiveLessonStatus.
+const (
+	JournalArchiveLessonStatusCancelled JournalArchiveLessonStatus = "cancelled"
+	JournalArchiveLessonStatusCompleted JournalArchiveLessonStatus = "completed"
+	JournalArchiveLessonStatusPlanned   JournalArchiveLessonStatus = "planned"
+)
+
 // Defines values for LessonStatus.
 const (
 	LessonStatusCancelled LessonStatus = "cancelled"
@@ -94,6 +101,20 @@ const (
 	Down  ServiceStatusStatus = "down"
 	Stale ServiceStatusStatus = "stale"
 	Up    ServiceStatusStatus = "up"
+)
+
+// Defines values for SubstitutionCandidateReasons.
+const (
+	AtSchool       SubstitutionCandidateReasons = "at_school"
+	KnowsClass     SubstitutionCandidateReasons = "knows_class"
+	TeachesSubject SubstitutionCandidateReasons = "teaches_subject"
+)
+
+// Defines values for SubstitutionLessonStatus.
+const (
+	SubstitutionLessonStatusCancelled SubstitutionLessonStatus = "cancelled"
+	SubstitutionLessonStatusCompleted SubstitutionLessonStatus = "completed"
+	SubstitutionLessonStatusPlanned   SubstitutionLessonStatus = "planned"
 )
 
 // Defines values for UserImportRowRole.
@@ -513,6 +534,100 @@ type InvitationLookup struct {
 	StudentName *string   `json:"student_name"`
 }
 
+// JournalArchive defines model for JournalArchive.
+type JournalArchive struct {
+	ClassId   openapi_types.UUID `json:"class_id"`
+	ClassName string             `json:"class_name"`
+
+	// Code Код подлинности для проверки распечатки
+	Code string `json:"code"`
+
+	// Digest SHA-256 содержимого архива
+	Digest string `json:"digest"`
+
+	// Final Все периоды года закрыты — данные больше не изменятся
+	Final       bool                    `json:"final"`
+	GeneratedAt time.Time               `json:"generated_at"`
+	GeneratedBy string                  `json:"generated_by"`
+	Periods     []JournalArchivePeriod  `json:"periods"`
+	SchoolName  string                  `json:"school_name"`
+	Students    []JournalArchiveStudent `json:"students"`
+	Subjects    []JournalArchiveSubject `json:"subjects"`
+	YearName    string                  `json:"year_name"`
+}
+
+// JournalArchiveLesson defines model for JournalArchiveLesson.
+type JournalArchiveLesson struct {
+	CancellationReason *string                    `json:"cancellation_reason"`
+	Homework           string                     `json:"homework"`
+	Id                 openapi_types.UUID         `json:"id"`
+	LessonDate         openapi_types.Date         `json:"lesson_date"`
+	PeriodId           openapi_types.UUID         `json:"period_id"`
+	Status             JournalArchiveLessonStatus `json:"status"`
+
+	// SubstituteFor Урок провела замена вместо этого учителя
+	SubstituteFor *string `json:"substitute_for"`
+	TeacherName   string  `json:"teacher_name"`
+	Topic         string  `json:"topic"`
+}
+
+// JournalArchiveLessonStatus defines model for JournalArchiveLesson.Status.
+type JournalArchiveLessonStatus string
+
+// JournalArchiveMark defines model for JournalArchiveMark.
+type JournalArchiveMark struct {
+	// Attendance absent, late, excused или exempt; присутствие не хранится
+	Attendance *string            `json:"attendance"`
+	Grades     []float32          `json:"grades"`
+	LessonId   openapi_types.UUID `json:"lesson_id"`
+	StudentId  openapi_types.UUID `json:"student_id"`
+}
+
+// JournalArchivePeriod defines model for JournalArchivePeriod.
+type JournalArchivePeriod struct {
+	Closed   bool               `json:"closed"`
+	EndsOn   openapi_types.Date `json:"ends_on"`
+	Id       openapi_types.UUID `json:"id"`
+	Name     string             `json:"name"`
+	StartsOn openapi_types.Date `json:"starts_on"`
+}
+
+// JournalArchiveStudent defines model for JournalArchiveStudent.
+type JournalArchiveStudent struct {
+	DisplayName string             `json:"display_name"`
+	Id          openapi_types.UUID `json:"id"`
+
+	// LeftOn Выбыл из класса
+	LeftOn *openapi_types.Date `json:"left_on"`
+}
+
+// JournalArchiveSubject defines model for JournalArchiveSubject.
+type JournalArchiveSubject struct {
+	Lessons     []JournalArchiveLesson    `json:"lessons"`
+	Marks       []JournalArchiveMark      `json:"marks"`
+	SubjectId   openapi_types.UUID        `json:"subject_id"`
+	SubjectName string                    `json:"subject_name"`
+	Teachers    []string                  `json:"teachers"`
+	TermGrades  []JournalArchiveTermGrade `json:"term_grades"`
+}
+
+// JournalArchiveTermGrade defines model for JournalArchiveTermGrade.
+type JournalArchiveTermGrade struct {
+	PeriodId  openapi_types.UUID `json:"period_id"`
+	StudentId openapi_types.UUID `json:"student_id"`
+	Value     float32            `json:"value"`
+}
+
+// JournalArchiveVerification defines model for JournalArchiveVerification.
+type JournalArchiveVerification struct {
+	ClassName   string    `json:"class_name"`
+	Code        string    `json:"code"`
+	Digest      string    `json:"digest"`
+	GeneratedAt time.Time `json:"generated_at"`
+	GeneratedBy string    `json:"generated_by"`
+	YearName    string    `json:"year_name"`
+}
+
 // JournalEntry defines model for JournalEntry.
 type JournalEntry struct {
 	GradeComment *string             `json:"grade_comment"`
@@ -531,22 +646,25 @@ type JournalEntry struct {
 
 // Lesson defines model for Lesson.
 type Lesson struct {
-	AcademicPeriodId   openapi_types.UUID  `json:"academic_period_id"`
-	CancellationReason *string             `json:"cancellation_reason"`
-	ClassId            openapi_types.UUID  `json:"class_id"`
-	ClassName          *string             `json:"class_name,omitempty"`
-	EndsAt             time.Time           `json:"ends_at"`
-	Id                 openapi_types.UUID  `json:"id"`
-	LessonDate         openapi_types.Date  `json:"lesson_date"`
-	RoomId             *openapi_types.UUID `json:"room_id"`
-	RoomName           *string             `json:"room_name"`
-	StartsAt           time.Time           `json:"starts_at"`
-	Status             LessonStatus        `json:"status"`
-	SubjectId          openapi_types.UUID  `json:"subject_id"`
-	SubjectName        *string             `json:"subject_name,omitempty"`
-	TeacherId          openapi_types.UUID  `json:"teacher_id"`
-	Topic              string              `json:"topic"`
-	Version            int                 `json:"version"`
+	AcademicPeriodId   openapi_types.UUID `json:"academic_period_id"`
+	CancellationReason *string            `json:"cancellation_reason"`
+	ClassId            openapi_types.UUID `json:"class_id"`
+	ClassName          *string            `json:"class_name,omitempty"`
+	EndsAt             time.Time          `json:"ends_at"`
+	Id                 openapi_types.UUID `json:"id"`
+	LessonDate         openapi_types.Date `json:"lesson_date"`
+
+	// OriginalTeacherName Урок ведёт замена; здесь — учитель по расписанию, которого заменяют
+	OriginalTeacherName *string             `json:"original_teacher_name"`
+	RoomId              *openapi_types.UUID `json:"room_id"`
+	RoomName            *string             `json:"room_name"`
+	StartsAt            time.Time           `json:"starts_at"`
+	Status              LessonStatus        `json:"status"`
+	SubjectId           openapi_types.UUID  `json:"subject_id"`
+	SubjectName         *string             `json:"subject_name,omitempty"`
+	TeacherId           openapi_types.UUID  `json:"teacher_id"`
+	Topic               string              `json:"topic"`
+	Version             int                 `json:"version"`
 }
 
 // LessonStatus defines model for Lesson.Status.
@@ -881,6 +999,43 @@ type SubjectAverage struct {
 	SubjectName string             `json:"subject_name"`
 	TermValue   *float32           `json:"term_value"`
 }
+
+// SubstitutionCandidate defines model for SubstitutionCandidate.
+type SubstitutionCandidate struct {
+	DisplayName    string `json:"display_name"`
+	LessonsThatDay int    `json:"lessons_that_day"`
+
+	// Reasons teaches_subject — ведёт этот предмет, knows_class — работает с этим классом, at_school — в этот день у него есть другие уроки
+	Reasons   []SubstitutionCandidateReasons `json:"reasons"`
+	TeacherId openapi_types.UUID             `json:"teacher_id"`
+}
+
+// SubstitutionCandidateReasons defines model for SubstitutionCandidate.Reasons.
+type SubstitutionCandidateReasons string
+
+// SubstitutionLesson defines model for SubstitutionLesson.
+type SubstitutionLesson struct {
+	ClassName  string             `json:"class_name"`
+	EndsAt     time.Time          `json:"ends_at"`
+	Id         openapi_types.UUID `json:"id"`
+	LessonDate openapi_types.Date `json:"lesson_date"`
+
+	// OriginalTeacherId Есть только у замены — учитель по расписанию
+	OriginalTeacherId   *openapi_types.UUID      `json:"original_teacher_id"`
+	OriginalTeacherName *string                  `json:"original_teacher_name"`
+	Reason              string                   `json:"reason"`
+	RoomName            *string                  `json:"room_name"`
+	StartsAt            time.Time                `json:"starts_at"`
+	Status              SubstitutionLessonStatus `json:"status"`
+	SubjectName         string                   `json:"subject_name"`
+
+	// TeacherId Кто ведёт урок сейчас
+	TeacherId   openapi_types.UUID `json:"teacher_id"`
+	TeacherName string             `json:"teacher_name"`
+}
+
+// SubstitutionLessonStatus defines model for SubstitutionLesson.Status.
+type SubstitutionLessonStatus string
 
 // SystemOverview defines model for SystemOverview.
 type SystemOverview struct {
@@ -1611,6 +1766,21 @@ type GetJournalParams struct {
 	AcademicPeriodId openapi_types.UUID `form:"academic_period_id" json:"academic_period_id"`
 }
 
+// IssueJournalArchiveJSONBody defines parameters for IssueJournalArchive.
+type IssueJournalArchiveJSONBody struct {
+	ClassId openapi_types.UUID `json:"class_id"`
+}
+
+// IssueJournalArchiveParams defines parameters for IssueJournalArchive.
+type IssueJournalArchiveParams struct {
+	XCSRFToken CSRF `json:"X-CSRF-Token"`
+}
+
+// VerifyJournalArchiveParams defines parameters for VerifyJournalArchive.
+type VerifyJournalArchiveParams struct {
+	Code string `form:"code" json:"code"`
+}
+
 // CreateLessonWorkJSONBody defines parameters for CreateLessonWork.
 type CreateLessonWorkJSONBody struct {
 	IsImportant *bool                            `json:"is_important,omitempty"`
@@ -1667,6 +1837,22 @@ type UpdateLessonParams struct {
 
 // UpdateLessonJSONBodyStatus defines parameters for UpdateLesson.
 type UpdateLessonJSONBodyStatus string
+
+// RemoveLessonSubstitutionParams defines parameters for RemoveLessonSubstitution.
+type RemoveLessonSubstitutionParams struct {
+	XCSRFToken CSRF `json:"X-CSRF-Token"`
+}
+
+// SetLessonSubstitutionJSONBody defines parameters for SetLessonSubstitution.
+type SetLessonSubstitutionJSONBody struct {
+	Reason    *string            `json:"reason,omitempty"`
+	TeacherId openapi_types.UUID `json:"teacher_id"`
+}
+
+// SetLessonSubstitutionParams defines parameters for SetLessonSubstitution.
+type SetLessonSubstitutionParams struct {
+	XCSRFToken CSRF `json:"X-CSRF-Token"`
+}
 
 // SetNotificationPreferencesJSONBody defines parameters for SetNotificationPreferences.
 type SetNotificationPreferencesJSONBody struct {
@@ -1871,6 +2057,18 @@ type UpdateSubjectParams struct {
 	XCSRFToken CSRF `json:"X-CSRF-Token"`
 }
 
+// ListSubstitutionsParams defines parameters for ListSubstitutions.
+type ListSubstitutionsParams struct {
+	From      openapi_types.Date  `form:"from" json:"from"`
+	To        openapi_types.Date  `form:"to" json:"to"`
+	TeacherId *openapi_types.UUID `form:"teacher_id,omitempty" json:"teacher_id,omitempty"`
+}
+
+// ListSubstitutionCandidatesParams defines parameters for ListSubstitutionCandidates.
+type ListSubstitutionCandidatesParams struct {
+	LessonId openapi_types.UUID `form:"lesson_id" json:"lesson_id"`
+}
+
 // CreateTeachingAssignmentJSONBody defines parameters for CreateTeachingAssignment.
 type CreateTeachingAssignmentJSONBody struct {
 	AcademicPeriodId openapi_types.UUID  `json:"academic_period_id"`
@@ -2063,6 +2261,9 @@ type CopyHomeworkJSONRequestBody CopyHomeworkJSONBody
 // CreateInvitationJSONRequestBody defines body for CreateInvitation for application/json ContentType.
 type CreateInvitationJSONRequestBody = InvitationInput
 
+// IssueJournalArchiveJSONRequestBody defines body for IssueJournalArchive for application/json ContentType.
+type IssueJournalArchiveJSONRequestBody IssueJournalArchiveJSONBody
+
 // CreateLessonWorkJSONRequestBody defines body for CreateLessonWork for application/json ContentType.
 type CreateLessonWorkJSONRequestBody CreateLessonWorkJSONBody
 
@@ -2071,6 +2272,9 @@ type CreateLessonJSONRequestBody CreateLessonJSONBody
 
 // UpdateLessonJSONRequestBody defines body for UpdateLesson for application/json ContentType.
 type UpdateLessonJSONRequestBody UpdateLessonJSONBody
+
+// SetLessonSubstitutionJSONRequestBody defines body for SetLessonSubstitution for application/json ContentType.
+type SetLessonSubstitutionJSONRequestBody SetLessonSubstitutionJSONBody
 
 // SetNotificationPreferencesJSONRequestBody defines body for SetNotificationPreferences for application/json ContentType.
 type SetNotificationPreferencesJSONRequestBody SetNotificationPreferencesJSONBody

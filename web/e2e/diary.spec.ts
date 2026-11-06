@@ -241,7 +241,8 @@ const pagesByRole: Record<string, { login: string; paths: string[] }> = {
   student: { login: 'demo-student1', paths: ['/today', '/schedule', '/homework', '/grades', '/announcements', '/settings'] },
   parent: { login: 'demo-parent1', paths: ['/today', '/schedule', '/homework', '/grades', '/announcements'] },
   admin: { login: 'demo-admin', paths: ['/today', '/schedule', '/admin', '/admin?view=students', '/admin?view=teachers', '/admin?view=classes',
-    '/admin?view=schedule', '/admin?view=subjects', '/admin?view=passwords', '/admin?tab=people', '/admin?tab=import', '/admin?tab=invitations', '/admin?tab=enrollment', '/admin?tab=assignments', '/admin?tab=schedule', '/admin?tab=structure', '/admin?tab=audit'] },
+    '/admin?view=schedule', '/admin?view=substitutions', '/admin?view=archive', '/admin?view=subjects', '/admin?view=passwords', '/admin?tab=people', '/admin?tab=import',
+    '/admin?tab=invitations', '/admin?tab=enrollment', '/admin?tab=assignments', '/admin?tab=schedule', '/admin?tab=substitutions', '/admin?tab=structure', '/admin?tab=archive', '/admin?tab=audit'] },
   sysadmin: { login: 'demo-sysadmin', paths: ['/today', '/system', '/admin?tab=structure'] },
 }
 
@@ -573,6 +574,61 @@ test('a parent added without a child is told why there are no grades; the admini
   await parent.reload()
   await expect(parent.getByRole('heading', { name: 'Вы пока не связаны с ребёнком' })).toBeVisible()
   await parentContext.close()
+})
+
+test('administrator finds a substitute for a lesson, then prints the class journal archive and verifies its code', async ({ page }) => {
+  test.setTimeout(120_000)
+  page.on('dialog', (dialog) => { void dialog.accept() })
+  await login(page, 'demo-admin', 'admin')
+  // Свой урок в воскресенье I четверти: демо-уроки других сценариев не меняются.
+  const csrf = (await page.context().cookies()).find((cookie) => cookie.name === 'diary_csrf')!.value
+  const lessonResponse = await page.request.post('/api/v1/lessons', { headers: { 'X-CSRF-Token': csrf }, data: {
+    lesson_date: '2026-09-27', starts_at: '2026-09-27T12:00:00Z', ends_at: '2026-09-27T12:45:00Z', topic: 'Повторение',
+    class_id: '00000000-0000-4000-8000-000000004001', subject_id: '00000000-0000-4000-8000-000000005001',
+    teacher_id: '00000000-0000-4000-8000-000000001002', academic_period_id: '00000000-0000-4000-8000-000000003001' } })
+  expect(lessonResponse.status()).toBe(201)
+
+  await page.goto('/admin')
+  await page.getByRole('navigation', { name: 'Задачи администратора' }).getByRole('button', { name: /Замены/ }).click()
+  await page.getByRole('combobox', { name: 'Учитель' }).selectOption({ label: 'Демо Учитель 1' })
+  await page.getByLabel('С', { exact: true }).fill('2026-09-27')
+  await page.getByLabel('По', { exact: true }).fill('2026-09-27')
+  const row = page.locator('.substitution-row').filter({ hasText: 'Математика, 5А' })
+  await row.getByRole('button', { name: 'Найти замену' }).click()
+  const best = row.getByRole('list', { name: 'Кто может заменить' }).locator('li').first()
+  await expect(best).toContainText('Лучший вариант')
+  await expect(best).toContainText('работает с этим классом')
+  const substitute = (await best.locator('strong').first().evaluate((node) => node.firstChild?.textContent ?? '')).trim()
+  await best.getByRole('button', { name: 'Назначить' }).click()
+  await expect(row).toContainText('Замена назначена')
+  await expect(row).toContainText(`заменяет ${substitute} (Болезнь)`)
+  await page.getByLabel('Месяц').fill('2026-09')
+  await expect(page.locator('.substitution-totals')).toContainText(substitute)
+
+  // Архив класса: урок с заменой, код подлинности; распечатку проверяют по коду в любом написании.
+  await page.getByRole('button', { name: 'К списку задач' }).click()
+  await page.getByRole('navigation', { name: 'Задачи администратора' }).getByRole('button', { name: /Архив журнала/ }).click()
+  await page.getByRole('combobox', { name: 'Класс' }).selectOption('00000000-0000-4000-8000-000000004001')
+  await page.getByRole('button', { name: 'Сформировать архив' }).click()
+  await expect(page.getByRole('heading', { name: 'Журнал 5А класса' })).toBeVisible()
+  await expect(page.locator('.archive-topics tr').filter({ hasText: 'Повторение' })).toContainText(`${substitute} (замена: Демо Учитель 1)`)
+  const code = (await page.locator('.archive-cover .archive-meta b').textContent())!.trim()
+  expect(code).toMatch(/^[0-9A-F]{4}(-[0-9A-F]{4}){3}$/)
+  await page.getByRole('button', { name: 'Назад' }).click()
+  await page.getByRole('textbox', { name: 'Проверить распечатку' }).fill(code.replaceAll('-', '').toLowerCase())
+  await page.getByRole('button', { name: 'Проверить' }).click()
+  await expect(page.getByRole('status').filter({ hasText: 'Распечатка подлинная.' })).toContainText('Журнал 5А класса')
+  await page.getByRole('textbox', { name: 'Проверить распечатку' }).fill('0000-0000-0000-0000')
+  await page.getByRole('button', { name: 'Проверить' }).click()
+  await expect(page.getByRole('status').filter({ hasText: 'Архив с таким кодом не выдавался.' })).toBeVisible()
+
+  // Отмена замены возвращает урок учителю по расписанию.
+  await page.goto('/admin?view=substitutions')
+  await page.getByRole('combobox', { name: 'Учитель' }).selectOption({ label: 'Демо Учитель 1' })
+  await page.getByLabel('С', { exact: true }).fill('2026-09-27')
+  await page.getByLabel('По', { exact: true }).fill('2026-09-27')
+  await row.getByRole('button', { name: 'Отменить' }).click()
+  await expect(row.getByRole('button', { name: 'Найти замену' })).toBeVisible()
 })
 
 // Последним: перенос меняет данные II четверти. В новой четверти нет назначений, и предмет в шаблоне выбрать нельзя,

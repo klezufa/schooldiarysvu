@@ -52,6 +52,14 @@ func (s *Service) GetJournal(ctx context.Context, actor Principal, classID, subj
 			}
 		}
 	}
+	if !allowed && actor.TeacherID != nil && actor.HasRole("teacher") {
+		// Заменяющему нужен журнал предмета, чтобы поставить оценки за проведённый урок; менять он может только свои.
+		allowed, err = s.queries.TeacherSubstitutesInJournal(ctx, db.TeacherSubstitutesInJournalParams{TeacherID: *actor.TeacherID,
+			ClassID: classID, SubjectID: subjectID, AcademicPeriodID: periodID})
+		if err != nil {
+			return nil, err
+		}
+	}
 	if !allowed {
 		return nil, apperr.NotFound()
 	}
@@ -109,7 +117,7 @@ func (s *Service) CreateLessonWork(ctx context.Context, actor Principal, input a
 		if err != nil {
 			return mapDatabaseError(err)
 		}
-		if err := requireLessonWrite(ctx, q, actor, lesson.ClassID, lesson.SubjectID, lesson.TeacherID, lesson.AcademicPeriodID, lesson.LessonDate); err != nil {
+		if err := requireLessonWrite(ctx, q, actor, lesson.ID, lesson.ClassID, lesson.SubjectID, lesson.TeacherID, lesson.AcademicPeriodID, lesson.LessonDate); err != nil {
 			return err
 		}
 		if err := requireOpenPeriod(ctx, q, lesson.AcademicPeriodID, true); err != nil {
@@ -316,7 +324,7 @@ func (s *Service) UpsertAttendance(ctx context.Context, actor Principal, input a
 		if err != nil {
 			return mapDatabaseError(err)
 		}
-		if err := requireLessonWrite(ctx, q, actor, lesson.ClassID, lesson.SubjectID, lesson.TeacherID, lesson.AcademicPeriodID, lesson.LessonDate); err != nil {
+		if err := requireLessonWrite(ctx, q, actor, lesson.ID, lesson.ClassID, lesson.SubjectID, lesson.TeacherID, lesson.AcademicPeriodID, lesson.LessonDate); err != nil {
 			return err
 		}
 		if err := requireOpenPeriod(ctx, q, lesson.AcademicPeriodID, true); err != nil {
@@ -376,7 +384,7 @@ func (s *Service) MarkAllPresent(ctx context.Context, actor Principal, lessonID 
 		if err != nil {
 			return mapDatabaseError(err)
 		}
-		if err := requireLessonWrite(ctx, q, actor, lesson.ClassID, lesson.SubjectID, lesson.TeacherID, lesson.AcademicPeriodID, lesson.LessonDate); err != nil {
+		if err := requireLessonWrite(ctx, q, actor, lesson.ID, lesson.ClassID, lesson.SubjectID, lesson.TeacherID, lesson.AcademicPeriodID, lesson.LessonDate); err != nil {
 			return err
 		}
 		if err := requireOpenPeriod(ctx, q, lesson.AcademicPeriodID, true); err != nil {
@@ -410,7 +418,7 @@ func requireGradeChange(ctx context.Context, q *db.Queries, actor Principal, wor
 	if actor.TeacherID == nil || *actor.TeacherID != work.TeacherID {
 		return apperr.NotFound()
 	}
-	if err := requireTeacherAssignment(ctx, q, actor, work.ClassID, work.SubjectID, work.AcademicPeriodID, work.LessonDate); err != nil {
+	if err := requireLessonTeacher(ctx, q, actor, work.LessonID, work.ClassID, work.SubjectID, work.AcademicPeriodID, work.LessonDate); err != nil {
 		return err
 	}
 	if err := requireOpenPeriod(ctx, q, work.AcademicPeriodID, true); err != nil {

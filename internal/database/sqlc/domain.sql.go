@@ -200,28 +200,31 @@ func (q *Queries) GetHomeworkView(ctx context.Context, id uuid.UUID) (GetHomewor
 const getLessonView = `-- name: GetLessonView :one
 SELECT l.id, l.lesson_date, l.starts_at, l.ends_at, l.class_id, c.name AS class_name,
        l.subject_id, s.name AS subject_name, l.teacher_id, l.room_id, r.name AS room_name,
-       l.academic_period_id, l.topic, l.status, l.cancellation_reason, l.version
+       l.academic_period_id, l.topic, l.status, l.cancellation_reason, l.version, ou.display_name AS original_teacher_name
 FROM lessons l JOIN classes c ON c.id = l.class_id JOIN subjects s ON s.id = l.subject_id
-LEFT JOIN rooms r ON r.id = l.room_id WHERE l.id = $1
+LEFT JOIN rooms r ON r.id = l.room_id
+LEFT JOIN lesson_substitutions ls ON ls.lesson_id = l.id LEFT JOIN teachers ot ON ot.id = ls.original_teacher_id
+LEFT JOIN users ou ON ou.id = ot.user_id WHERE l.id = $1
 `
 
 type GetLessonViewRow struct {
-	ID                 uuid.UUID   `json:"id"`
-	LessonDate         time.Time   `json:"lesson_date"`
-	StartsAt           time.Time   `json:"starts_at"`
-	EndsAt             time.Time   `json:"ends_at"`
-	ClassID            uuid.UUID   `json:"class_id"`
-	ClassName          string      `json:"class_name"`
-	SubjectID          uuid.UUID   `json:"subject_id"`
-	SubjectName        string      `json:"subject_name"`
-	TeacherID          uuid.UUID   `json:"teacher_id"`
-	RoomID             pgtype.UUID `json:"room_id"`
-	RoomName           pgtype.Text `json:"room_name"`
-	AcademicPeriodID   uuid.UUID   `json:"academic_period_id"`
-	Topic              string      `json:"topic"`
-	Status             string      `json:"status"`
-	CancellationReason pgtype.Text `json:"cancellation_reason"`
-	Version            int32       `json:"version"`
+	ID                  uuid.UUID   `json:"id"`
+	LessonDate          time.Time   `json:"lesson_date"`
+	StartsAt            time.Time   `json:"starts_at"`
+	EndsAt              time.Time   `json:"ends_at"`
+	ClassID             uuid.UUID   `json:"class_id"`
+	ClassName           string      `json:"class_name"`
+	SubjectID           uuid.UUID   `json:"subject_id"`
+	SubjectName         string      `json:"subject_name"`
+	TeacherID           uuid.UUID   `json:"teacher_id"`
+	RoomID              pgtype.UUID `json:"room_id"`
+	RoomName            pgtype.Text `json:"room_name"`
+	AcademicPeriodID    uuid.UUID   `json:"academic_period_id"`
+	Topic               string      `json:"topic"`
+	Status              string      `json:"status"`
+	CancellationReason  pgtype.Text `json:"cancellation_reason"`
+	Version             int32       `json:"version"`
+	OriginalTeacherName pgtype.Text `json:"original_teacher_name"`
 }
 
 func (q *Queries) GetLessonView(ctx context.Context, id uuid.UUID) (GetLessonViewRow, error) {
@@ -244,6 +247,7 @@ func (q *Queries) GetLessonView(ctx context.Context, id uuid.UUID) (GetLessonVie
 		&i.Status,
 		&i.CancellationReason,
 		&i.Version,
+		&i.OriginalTeacherName,
 	)
 	return i, err
 }
@@ -321,28 +325,31 @@ func (q *Queries) ListAllAnnouncements(ctx context.Context) ([]ListAllAnnounceme
 const listLessonViews = `-- name: ListLessonViews :many
 SELECT l.id, l.lesson_date, l.starts_at, l.ends_at, l.class_id, c.name AS class_name,
        l.subject_id, s.name AS subject_name, l.teacher_id, l.room_id, r.name AS room_name,
-       l.academic_period_id, l.topic, l.status, l.cancellation_reason, l.version
+       l.academic_period_id, l.topic, l.status, l.cancellation_reason, l.version, ou.display_name AS original_teacher_name
 FROM lessons l JOIN classes c ON c.id = l.class_id JOIN subjects s ON s.id = l.subject_id
-LEFT JOIN rooms r ON r.id = l.room_id WHERE l.id = ANY($1::uuid[]) ORDER BY l.starts_at, l.id
+LEFT JOIN rooms r ON r.id = l.room_id
+LEFT JOIN lesson_substitutions ls ON ls.lesson_id = l.id LEFT JOIN teachers ot ON ot.id = ls.original_teacher_id
+LEFT JOIN users ou ON ou.id = ot.user_id WHERE l.id = ANY($1::uuid[]) ORDER BY l.starts_at, l.id
 `
 
 type ListLessonViewsRow struct {
-	ID                 uuid.UUID   `json:"id"`
-	LessonDate         time.Time   `json:"lesson_date"`
-	StartsAt           time.Time   `json:"starts_at"`
-	EndsAt             time.Time   `json:"ends_at"`
-	ClassID            uuid.UUID   `json:"class_id"`
-	ClassName          string      `json:"class_name"`
-	SubjectID          uuid.UUID   `json:"subject_id"`
-	SubjectName        string      `json:"subject_name"`
-	TeacherID          uuid.UUID   `json:"teacher_id"`
-	RoomID             pgtype.UUID `json:"room_id"`
-	RoomName           pgtype.Text `json:"room_name"`
-	AcademicPeriodID   uuid.UUID   `json:"academic_period_id"`
-	Topic              string      `json:"topic"`
-	Status             string      `json:"status"`
-	CancellationReason pgtype.Text `json:"cancellation_reason"`
-	Version            int32       `json:"version"`
+	ID                  uuid.UUID   `json:"id"`
+	LessonDate          time.Time   `json:"lesson_date"`
+	StartsAt            time.Time   `json:"starts_at"`
+	EndsAt              time.Time   `json:"ends_at"`
+	ClassID             uuid.UUID   `json:"class_id"`
+	ClassName           string      `json:"class_name"`
+	SubjectID           uuid.UUID   `json:"subject_id"`
+	SubjectName         string      `json:"subject_name"`
+	TeacherID           uuid.UUID   `json:"teacher_id"`
+	RoomID              pgtype.UUID `json:"room_id"`
+	RoomName            pgtype.Text `json:"room_name"`
+	AcademicPeriodID    uuid.UUID   `json:"academic_period_id"`
+	Topic               string      `json:"topic"`
+	Status              string      `json:"status"`
+	CancellationReason  pgtype.Text `json:"cancellation_reason"`
+	Version             int32       `json:"version"`
+	OriginalTeacherName pgtype.Text `json:"original_teacher_name"`
 }
 
 // Уроки расписания одним запросом (вместо GetLessonView на каждый урок), в порядке начала.
@@ -372,6 +379,7 @@ func (q *Queries) ListLessonViews(ctx context.Context, dollar_1 []uuid.UUID) ([]
 			&i.Status,
 			&i.CancellationReason,
 			&i.Version,
+			&i.OriginalTeacherName,
 		); err != nil {
 			return nil, err
 		}

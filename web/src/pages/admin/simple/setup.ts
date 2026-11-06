@@ -2,7 +2,7 @@ import type { AcademicPeriod } from '../../../api/types'
 import { addDays } from '../../../lib/dates'
 
 /** Разделы упрощённого режима; пустая строка — главная со списком задач. */
-export type SimpleView = '' | 'students' | 'parents' | 'teachers' | 'classes' | 'class' | 'schedule' | 'passwords' | 'subjects'
+export type SimpleView = '' | 'students' | 'parents' | 'teachers' | 'classes' | 'class' | 'schedule' | 'substitutions' | 'archive' | 'passwords' | 'subjects'
 
 export type SetupInput = {
   hasCurrentPeriod: boolean

@@ -1,17 +1,21 @@
 -- name: GetLessonView :one
 SELECT l.id, l.lesson_date, l.starts_at, l.ends_at, l.class_id, c.name AS class_name,
        l.subject_id, s.name AS subject_name, l.teacher_id, l.room_id, r.name AS room_name,
-       l.academic_period_id, l.topic, l.status, l.cancellation_reason, l.version
+       l.academic_period_id, l.topic, l.status, l.cancellation_reason, l.version, ou.display_name AS original_teacher_name
 FROM lessons l JOIN classes c ON c.id = l.class_id JOIN subjects s ON s.id = l.subject_id
-LEFT JOIN rooms r ON r.id = l.room_id WHERE l.id = $1;
+LEFT JOIN rooms r ON r.id = l.room_id
+LEFT JOIN lesson_substitutions ls ON ls.lesson_id = l.id LEFT JOIN teachers ot ON ot.id = ls.original_teacher_id
+LEFT JOIN users ou ON ou.id = ot.user_id WHERE l.id = $1;
 
 -- name: ListLessonViews :many
 -- Уроки расписания одним запросом (вместо GetLessonView на каждый урок), в порядке начала.
 SELECT l.id, l.lesson_date, l.starts_at, l.ends_at, l.class_id, c.name AS class_name,
        l.subject_id, s.name AS subject_name, l.teacher_id, l.room_id, r.name AS room_name,
-       l.academic_period_id, l.topic, l.status, l.cancellation_reason, l.version
+       l.academic_period_id, l.topic, l.status, l.cancellation_reason, l.version, ou.display_name AS original_teacher_name
 FROM lessons l JOIN classes c ON c.id = l.class_id JOIN subjects s ON s.id = l.subject_id
-LEFT JOIN rooms r ON r.id = l.room_id WHERE l.id = ANY($1::uuid[]) ORDER BY l.starts_at, l.id;
+LEFT JOIN rooms r ON r.id = l.room_id
+LEFT JOIN lesson_substitutions ls ON ls.lesson_id = l.id LEFT JOIN teachers ot ON ot.id = ls.original_teacher_id
+LEFT JOIN users ou ON ou.id = ot.user_id WHERE l.id = ANY($1::uuid[]) ORDER BY l.starts_at, l.id;
 
 -- name: TeacherAssignmentExists :one
 SELECT EXISTS (SELECT 1 FROM teaching_assignments ta

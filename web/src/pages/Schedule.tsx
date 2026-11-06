@@ -26,6 +26,7 @@ export function LessonCard({ lesson, onClick }: { lesson: Lesson; onClick?: () =
           <StatusBadge tone={lessonTone(lesson.status)}>{lesson.status === 'cancelled' ? 'Отменён' : lesson.status === 'completed' ? 'Завершён' : 'По расписанию'}</StatusBadge>
         </div>
         <p>{lesson.topic || 'Тема ещё не указана'}</p>
+        {lesson.original_teacher_name && <small className="lesson-substitution">Замена · вместо: {lesson.original_teacher_name}</small>}
         <small>{lesson.class_name && <span>{lesson.class_name} · </span>}{lesson.room_name && <span><MapPin aria-hidden="true" />{lesson.room_name}</span>}</small>
       </div>
     </>

@@ -216,6 +216,15 @@ type Lesson struct {
 	UpdatedAt          time.Time   `json:"updated_at"`
 }
 
+type LessonSubstitution struct {
+	LessonID          uuid.UUID `json:"lesson_id"`
+	OriginalTeacherID uuid.UUID `json:"original_teacher_id"`
+	Reason            string    `json:"reason"`
+	CreatedBy         uuid.UUID `json:"created_by"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
+}
+
 type LessonWork struct {
 	ID          uuid.UUID      `json:"id"`
 	LessonID    uuid.UUID      `json:"lesson_id"`

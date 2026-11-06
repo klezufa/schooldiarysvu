@@ -605,6 +605,92 @@ export interface paths {
         patch: operations["updateLesson"];
         trace?: never;
     };
+    "/lessons/{id}/substitution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Назначить замену на урок. Урок переходит к заменяющему учителю (он ведёт тему, посещаемость, оценки и задание этого урока), класс и учитель получают уведомление */
+        put: operations["setLessonSubstitution"];
+        post?: never;
+        /** Отменить замену — урок возвращается учителю по расписанию, если он свободен в это время */
+        delete: operations["removeLessonSubstitution"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/substitutions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Без teacher_id — все замены за период (учёт для оплаты); с teacher_id — уроки учителя за период, свои и те, на которых его заменили */
+        get: operations["listSubstitutions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/substitutions/candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Учителя, свободные во время урока, лучшие первыми — ведёт этот предмет, работает с этим классом, уже в школе в этот день */
+        get: operations["listSubstitutionCandidates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/journal-archives": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Сформировать архив журнала класса за учебный год для печати. Каждая выдача получает код подлинности и записывается в журнал аудита */
+        post: operations["issueJournalArchive"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/journal-archives/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Проверить распечатку архива по коду подлинности */
+        get: operations["verifyJournalArchive"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/journal": {
         parameters: {
             query?: never;
@@ -1445,6 +1531,131 @@ export interface components {
             /** @description surname — та же фамилия (с учётом мужской и женской формы), patronymic — отчество ребёнка образовано от имени родителя */
             reasons: ("surname" | "patronymic")[];
         };
+        SubstitutionLesson: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date */
+            lesson_date: string;
+            /** Format: date-time */
+            starts_at: string;
+            /** Format: date-time */
+            ends_at: string;
+            /** @enum {string} */
+            status: "planned" | "completed" | "cancelled";
+            class_name: string;
+            subject_name: string;
+            room_name?: string | null;
+            /**
+             * Format: uuid
+             * @description Кто ведёт урок сейчас
+             */
+            teacher_id: string;
+            teacher_name: string;
+            /**
+             * Format: uuid
+             * @description Есть только у замены — учитель по расписанию
+             */
+            original_teacher_id?: string | null;
+            original_teacher_name?: string | null;
+            reason: string;
+        };
+        SubstitutionCandidate: {
+            /** Format: uuid */
+            teacher_id: string;
+            display_name: string;
+            /** @description teaches_subject — ведёт этот предмет, knows_class — работает с этим классом, at_school — в этот день у него есть другие уроки */
+            reasons: ("teaches_subject" | "knows_class" | "at_school")[];
+            lessons_that_day: number;
+        };
+        JournalArchive: {
+            /** @description Код подлинности для проверки распечатки */
+            code: string;
+            /** @description SHA-256 содержимого архива */
+            digest: string;
+            /** Format: date-time */
+            generated_at: string;
+            generated_by: string;
+            school_name: string;
+            /** Format: uuid */
+            class_id: string;
+            class_name: string;
+            year_name: string;
+            /** @description Все периоды года закрыты — данные больше не изменятся */
+            final: boolean;
+            periods: components["schemas"]["JournalArchivePeriod"][];
+            students: components["schemas"]["JournalArchiveStudent"][];
+            subjects: components["schemas"]["JournalArchiveSubject"][];
+        };
+        JournalArchivePeriod: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** Format: date */
+            starts_on: string;
+            /** Format: date */
+            ends_on: string;
+            closed: boolean;
+        };
+        JournalArchiveStudent: {
+            /** Format: uuid */
+            id: string;
+            display_name: string;
+            /**
+             * Format: date
+             * @description Выбыл из класса
+             */
+            left_on?: string | null;
+        };
+        JournalArchiveSubject: {
+            /** Format: uuid */
+            subject_id: string;
+            subject_name: string;
+            teachers: string[];
+            lessons: components["schemas"]["JournalArchiveLesson"][];
+            marks: components["schemas"]["JournalArchiveMark"][];
+            term_grades: components["schemas"]["JournalArchiveTermGrade"][];
+        };
+        JournalArchiveLesson: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date */
+            lesson_date: string;
+            /** Format: uuid */
+            period_id: string;
+            topic: string;
+            /** @enum {string} */
+            status: "planned" | "completed" | "cancelled";
+            cancellation_reason?: string | null;
+            teacher_name: string;
+            /** @description Урок провела замена вместо этого учителя */
+            substitute_for?: string | null;
+            homework: string;
+        };
+        JournalArchiveMark: {
+            /** Format: uuid */
+            lesson_id: string;
+            /** Format: uuid */
+            student_id: string;
+            grades: number[];
+            /** @description absent, late, excused или exempt; присутствие не хранится */
+            attendance?: string | null;
+        };
+        JournalArchiveTermGrade: {
+            /** Format: uuid */
+            student_id: string;
+            /** Format: uuid */
+            period_id: string;
+            value: number;
+        };
+        JournalArchiveVerification: {
+            code: string;
+            digest: string;
+            class_name: string;
+            year_name: string;
+            /** Format: date-time */
+            generated_at: string;
+            generated_by: string;
+        };
         Student: {
             /** Format: uuid */
             id: string;
@@ -1546,6 +1757,8 @@ export interface components {
             status: "planned" | "completed" | "cancelled";
             cancellation_reason?: string | null;
             version: number;
+            /** @description Урок ведёт замена; здесь — учитель по расписанию, которого заменяют */
+            original_teacher_name?: string | null;
         };
         JournalEntry: {
             /** Format: uuid */
@@ -3956,6 +4169,172 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    setLessonSubstitution: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    teacher_id: string;
+                    reason?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Замена назначена */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubstitutionLesson"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+        };
+    };
+    removeLessonSubstitution: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Замена отменена */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listSubstitutions: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+                teacher_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Уроки по времени начала */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubstitutionLesson"][];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["Unprocessable"];
+        };
+    };
+    listSubstitutionCandidates: {
+        parameters: {
+            query: {
+                lesson_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Кандидаты */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubstitutionCandidate"][];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    issueJournalArchive: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    class_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Архив журнала */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalArchive"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    verifyJournalArchive: {
+        parameters: {
+            query: {
+                code: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Архив с таким кодом выдавался */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalArchiveVerification"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     getJournal: {

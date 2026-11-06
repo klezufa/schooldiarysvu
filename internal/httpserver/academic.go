@@ -99,6 +99,7 @@ func (a *API) registerAcademicRoutes(r chi.Router) {
 	r.With(a.authenticate).Get("/reports/subjects/{id}", a.subjectReport)
 	r.With(a.authenticate).Get("/audit", a.listAudit)
 	a.registerAdminRoutes(r)
+	a.registerSubstitutionRoutes(r)
 }
 
 func (a *API) createUser(w http.ResponseWriter, r *http.Request) {

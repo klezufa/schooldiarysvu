@@ -449,6 +449,52 @@ paths:
       parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}, {$ref: '#/components/parameters/Version'}]
       requestBody: {required: true, content: {application/json: {schema: {type: object, required: [topic, status], properties: {topic: {type: string, maxLength: 1000}, room_id: {type: string, format: uuid}, status: {type: string, enum: [planned, completed, cancelled]}, cancellation_reason: {type: string}, lesson_date: {type: string, format: date}, starts_at: {type: string, format: date-time}, ends_at: {type: string, format: date-time}, teacher_id: {type: string, format: uuid}}}}}}
       responses: {'200': {description: Урок обновлён, content: {application/json: {schema: {$ref: '#/components/schemas/Lesson'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}, '409': {$ref: '#/components/responses/Conflict'}}
+  /lessons/{id}/substitution:
+    put:
+      tags: [administration]
+      operationId: setLessonSubstitution
+      summary: Назначить замену на урок. Урок переходит к заменяющему учителю (он ведёт тему, посещаемость, оценки и задание этого урока), класс и учитель получают уведомление
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [teacher_id], properties: {teacher_id: {type: string, format: uuid}, reason: {type: string, maxLength: 300}}}}}}
+      responses: {'200': {description: Замена назначена, content: {application/json: {schema: {$ref: '#/components/schemas/SubstitutionLesson'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}, '409': {$ref: '#/components/responses/Conflict'}, '422': {$ref: '#/components/responses/Unprocessable'}}
+    delete:
+      tags: [administration]
+      operationId: removeLessonSubstitution
+      summary: Отменить замену — урок возвращается учителю по расписанию, если он свободен в это время
+      parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/CSRF'}]
+      responses: {'204': {description: Замена отменена}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}, '409': {$ref: '#/components/responses/Conflict'}}
+  /substitutions:
+    get:
+      tags: [administration]
+      operationId: listSubstitutions
+      summary: Без teacher_id — все замены за период (учёт для оплаты); с teacher_id — уроки учителя за период, свои и те, на которых его заменили
+      parameters:
+        - {name: from, in: query, required: true, schema: {type: string, format: date}}
+        - {name: to, in: query, required: true, schema: {type: string, format: date}}
+        - {name: teacher_id, in: query, schema: {type: string, format: uuid}}
+      responses: {'200': {description: Уроки по времени начала, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/SubstitutionLesson'}}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '422': {$ref: '#/components/responses/Unprocessable'}}
+  /substitutions/candidates:
+    get:
+      tags: [administration]
+      operationId: listSubstitutionCandidates
+      summary: Учителя, свободные во время урока, лучшие первыми — ведёт этот предмет, работает с этим классом, уже в школе в этот день
+      parameters: [{name: lesson_id, in: query, required: true, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: Кандидаты, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/SubstitutionCandidate'}}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}
+  /journal-archives:
+    post:
+      tags: [journal]
+      operationId: issueJournalArchive
+      summary: Сформировать архив журнала класса за учебный год для печати. Каждая выдача получает код подлинности и записывается в журнал аудита
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [class_id], properties: {class_id: {type: string, format: uuid}}}}}}
+      responses: {'201': {description: Архив журнала, content: {application/json: {schema: {$ref: '#/components/schemas/JournalArchive'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}
+  /journal-archives/verify:
+    get:
+      tags: [journal]
+      operationId: verifyJournalArchive
+      summary: Проверить распечатку архива по коду подлинности
+      parameters: [{name: code, in: query, required: true, schema: {type: string, minLength: 4, maxLength: 40}}]
+      responses: {'200': {description: Архив с таким кодом выдавался, content: {application/json: {schema: {$ref: '#/components/schemas/JournalArchiveVerification'}}}}, '403': {$ref: '#/components/responses/Forbidden'}, '404': {$ref: '#/components/responses/NotFound'}}
   /journal:
     get:
       tags: [journal]
@@ -1035,6 +1081,126 @@ components:
           type: array
           description: surname — та же фамилия (с учётом мужской и женской формы), patronymic — отчество ребёнка образовано от имени родителя
           items: {type: string, enum: [surname, patronymic]}
+    SubstitutionLesson:
+      type: object
+      required: [id, lesson_date, starts_at, ends_at, status, class_name, subject_name, teacher_id, teacher_name, reason]
+      properties:
+        id: {type: string, format: uuid}
+        lesson_date: {type: string, format: date}
+        starts_at: {type: string, format: date-time}
+        ends_at: {type: string, format: date-time}
+        status: {type: string, enum: [planned, completed, cancelled]}
+        class_name: {type: string}
+        subject_name: {type: string}
+        room_name: {type: string, nullable: true}
+        teacher_id: {type: string, format: uuid, description: Кто ведёт урок сейчас}
+        teacher_name: {type: string}
+        original_teacher_id: {type: string, format: uuid, nullable: true, description: Есть только у замены — учитель по расписанию}
+        original_teacher_name: {type: string, nullable: true}
+        reason: {type: string}
+    SubstitutionCandidate:
+      type: object
+      required: [teacher_id, display_name, reasons, lessons_that_day]
+      properties:
+        teacher_id: {type: string, format: uuid}
+        display_name: {type: string}
+        reasons:
+          type: array
+          description: teaches_subject — ведёт этот предмет, knows_class — работает с этим классом, at_school — в этот день у него есть другие уроки
+          items: {type: string, enum: [teaches_subject, knows_class, at_school]}
+        lessons_that_day: {type: integer, minimum: 0}
+    JournalArchive:
+      type: object
+      required: [code, digest, generated_at, generated_by, school_name, class_id, class_name, year_name, final, periods, students, subjects]
+      properties:
+        code: {type: string, description: Код подлинности для проверки распечатки}
+        digest: {type: string, description: SHA-256 содержимого архива}
+        generated_at: {type: string, format: date-time}
+        generated_by: {type: string}
+        school_name: {type: string}
+        class_id: {type: string, format: uuid}
+        class_name: {type: string}
+        year_name: {type: string}
+        final: {type: boolean, description: Все периоды года закрыты — данные больше не изменятся}
+        periods:
+          type: array
+          items: {$ref: '#/components/schemas/JournalArchivePeriod'}
+        students:
+          type: array
+          items: {$ref: '#/components/schemas/JournalArchiveStudent'}
+        subjects:
+          type: array
+          items: {$ref: '#/components/schemas/JournalArchiveSubject'}
+    JournalArchivePeriod:
+      type: object
+      required: [id, name, starts_on, ends_on, closed]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        starts_on: {type: string, format: date}
+        ends_on: {type: string, format: date}
+        closed: {type: boolean}
+    JournalArchiveStudent:
+      type: object
+      required: [id, display_name]
+      properties:
+        id: {type: string, format: uuid}
+        display_name: {type: string}
+        left_on: {type: string, format: date, nullable: true, description: Выбыл из класса}
+    JournalArchiveSubject:
+      type: object
+      required: [subject_id, subject_name, teachers, lessons, marks, term_grades]
+      properties:
+        subject_id: {type: string, format: uuid}
+        subject_name: {type: string}
+        teachers: {type: array, items: {type: string}}
+        lessons:
+          type: array
+          items: {$ref: '#/components/schemas/JournalArchiveLesson'}
+        marks:
+          type: array
+          items: {$ref: '#/components/schemas/JournalArchiveMark'}
+        term_grades:
+          type: array
+          items: {$ref: '#/components/schemas/JournalArchiveTermGrade'}
+    JournalArchiveLesson:
+      type: object
+      required: [id, lesson_date, period_id, topic, status, teacher_name, homework]
+      properties:
+        id: {type: string, format: uuid}
+        lesson_date: {type: string, format: date}
+        period_id: {type: string, format: uuid}
+        topic: {type: string}
+        status: {type: string, enum: [planned, completed, cancelled]}
+        cancellation_reason: {type: string, nullable: true}
+        teacher_name: {type: string}
+        substitute_for: {type: string, nullable: true, description: Урок провела замена вместо этого учителя}
+        homework: {type: string}
+    JournalArchiveMark:
+      type: object
+      required: [lesson_id, student_id, grades]
+      properties:
+        lesson_id: {type: string, format: uuid}
+        student_id: {type: string, format: uuid}
+        grades: {type: array, items: {type: number}}
+        attendance: {type: string, nullable: true, description: 'absent, late, excused или exempt; присутствие не хранится'}
+    JournalArchiveTermGrade:
+      type: object
+      required: [student_id, period_id, value]
+      properties:
+        student_id: {type: string, format: uuid}
+        period_id: {type: string, format: uuid}
+        value: {type: number}
+    JournalArchiveVerification:
+      type: object
+      required: [code, digest, class_name, year_name, generated_at, generated_by]
+      properties:
+        code: {type: string}
+        digest: {type: string}
+        class_name: {type: string}
+        year_name: {type: string}
+        generated_at: {type: string, format: date-time}
+        generated_by: {type: string}
     Student:
       type: object
       required: [id, display_name]
@@ -1120,6 +1286,10 @@ components:
         status: {type: string, enum: [planned, completed, cancelled]}
         cancellation_reason: {type: string, nullable: true}
         version: {type: integer, minimum: 1}
+        original_teacher_name:
+          type: string
+          nullable: true
+          description: Урок ведёт замена; здесь — учитель по расписанию, которого заменяют
     JournalEntry:
       type: object
       required: [student_id, student_name, lesson_id, lesson_date, lesson_work_id, work_type, work_title, weight]
