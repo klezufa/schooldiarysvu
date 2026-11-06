@@ -76,6 +76,17 @@
 
 ## Быстрый старт
 
+> **Пилот в школе на Ubuntu Server.** Скачайте выпуск для пилота и дальше идите по
+> **[docs/pilot.md](docs/pilot.md)** — от установки Docker до плана тестирования с учителями и учениками:
+>
+> ```bash
+> sudo git clone https://github.com/klezufa/schooldiarysvu.git /opt/schooldiary
+> cd /opt/schooldiary && sudo git checkout pilot-1
+> ```
+>
+> Образы собираются на сервере из исходников (`docker compose up -d --build`); нужен только файл `.env`
+> с настройками сервера — его содержимое приведено в инструкции.
+
 Есть три способа запуска, выберите подходящий.
 
 ### 1. Docker Compose — попробовать на своём компьютере
