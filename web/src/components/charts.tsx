@@ -1,4 +1,4 @@
-import { useId, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { Table2, BarChart3 } from 'lucide-react'
 import { compact, formatNumber, formatPercent, niceTicks, type Datum, type LinePoint, type Tone } from '../lib/chartMath'
 
@@ -104,7 +104,7 @@ export function ColumnChart({ data, max, height = 220, format = (value) => forma
         ))}
       </div>
       <div className="column-plot">
-        {data.map((item) => {
+        {data.map((item, index) => {
           const share = domain > 0 ? Math.max(0, Math.min(1, item.value / domain)) : 0
           const label = `${item.label}: ${format(item.value)}${item.hint ? `, ${item.hint}` : ''}`
           return (
@@ -119,7 +119,7 @@ export function ColumnChart({ data, max, height = 220, format = (value) => forma
                 onBlur={() => setActive(null)}
               >
                 <span className="column-value">{format(item.value)}</span>
-                <span className="column-bar" style={{ height: `${share * 100}%`, background: item.color ?? 'var(--series-1)' }} />
+                <span className="column-bar" style={{ height: `${share * 100}%`, background: item.color ?? 'var(--series-1)', '--i': index } as CSSProperties} />
               </button>
               <span className="column-label" title={item.label}>{item.label}</span>
               {active === item.key && (
@@ -291,7 +291,7 @@ export function LineChart({ points, domain, height = 200, format = (value) => fo
           if (event.key === 'ArrowRight') setIndex((current) => Math.min(points.length - 1, (current ?? 0) + 1))
         }}
       >
-        <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <svg className="line-draw" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
           <path d={area} fill={color} opacity={0.1} />
           <path d={line} fill="none" stroke={color} strokeWidth={2} vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
         </svg>
@@ -331,6 +331,34 @@ export function Sparkline({ values, color = 'var(--series-1)', label }: { values
   )
 }
 
+const numberPattern = /^(\d+)(?:,(\d+))?(\s?%)?$/
+
+/**
+ * Число в плитке «досчитывается» при появлении значения (700 мс, ease-out). Работает для чисел и строк вида
+ * «4,25» и «92 %»; остальное (даты, «—») показывается как есть. Во время счёта экранный диктор получает итоговое
+ * значение, при «уменьшить движение» число сразу итоговое.
+ */
+function AnimatedValue({ value }: { value: ReactNode }): React.JSX.Element {
+  const text = typeof value === 'number' ? String(value).replace('.', ',') : typeof value === 'string' ? value : null
+  const match = text ? numberPattern.exec(text) : null
+  const target = match ? Number(`${match[1]}.${match[2] ?? 0}`) : null
+  const decimals = match?.[2]?.length ?? 0
+  const [shown, setShown] = useState<number | null>(null)
+  useEffect(() => {
+    const reduced = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (target === null || target === 0 || reduced) return undefined
+    const start = performance.now()
+    let frame = requestAnimationFrame(function tick(now) {
+      const progress = Math.min(1, (now - start) / 700)
+      setShown(progress < 1 ? target * (1 - (1 - progress) ** 3) : null)
+      if (progress < 1) frame = requestAnimationFrame(tick)
+    })
+    return () => { cancelAnimationFrame(frame); setShown(null) }
+  }, [target])
+  if (shown === null) return <>{value}</>
+  return <><span aria-hidden="true">{shown.toFixed(decimals).replace('.', ',')}{match?.[3] ?? ''}</span><span className="sr-only">{value}</span></>
+}
+
 /** Плитка показателя: подпись, значение, пояснение, по желанию — тренд. */
 export function StatTile({ icon, label, value, detail, tone = 'blue', trend }: {
   icon: ReactNode
@@ -345,7 +373,7 @@ export function StatTile({ icon, label, value, detail, tone = 'blue', trend }: {
       <span className="stat-icon" aria-hidden="true">{icon}</span>
       <div className="stat-body">
         <span className="stat-label">{label}</span>
-        <strong className="stat-value">{value}</strong>
+        <strong className="stat-value"><AnimatedValue value={value} /></strong>
         {detail && <span className="stat-detail">{detail}</span>}
       </div>
       {trend && <div className="stat-trend">{trend}</div>}

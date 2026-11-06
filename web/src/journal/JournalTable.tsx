@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { createColumnHelper, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { JournalEntry, Student } from '../api/types'
@@ -27,6 +27,13 @@ export function JournalTable({ entries, students, allowedValues, onSave, isSavin
 }): React.JSX.Element {
   const [editing, setEditing] = useState<{ entry: JournalEntry; row: number; col: number; initialValue?: number } | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  // Только что сохранённая клетка коротко подсвечивается «маркером»: видно, какая оценка записалась.
+  const [justSaved, setJustSaved] = useState<string | null>(null)
+  useEffect(() => {
+    if (!justSaved) return undefined
+    const timer = window.setTimeout(() => setJustSaved(null), 1200)
+    return () => window.clearTimeout(timer)
+  }, [justSaved])
   const works = useMemo(() => {
     const map = new Map<string, JournalEntry>()
     entries.filter((entry) => (!month || entry.lesson_date.startsWith(month)) && (mode !== 'lesson' || entry.lesson_id === selectedLessonId)).forEach((entry) => map.set(entry.lesson_work_id, entry))
@@ -45,10 +52,10 @@ export function JournalTable({ entries, students, allowedValues, onSave, isSavin
     ...works.map((work, columnIndex) => helper.display({ id: work.lesson_work_id, size: compact ? 82 : 108, header: () => <span className="work-heading"><strong>{formatDate(work.lesson_date, { day: '2-digit', month: '2-digit' })}</strong><small title={work.work_title}>{workNames[work.work_type] ?? work.work_type}</small></span>, cell: (info) => {
       const entry = info.row.original.cells[work.lesson_work_id]
       if (!entry) return <span className="grade-empty">—</span>
-      return <button className={`grade-cell ${entry.grade_value != null ? `tone-${gradeTone(entry.grade_value)}` : 'grade-empty'} ${entry.grade_id === 'pending' ? 'saving' : ''}`} data-grade-cell data-row={info.row.index} data-col={columnIndex} aria-label={`${info.row.original.student.display_name}, ${formatDate(work.lesson_date)}, оценка ${entry.grade_value ?? 'не выставлена'}`} onClick={() => setEditing({ entry, row: info.row.index, col: columnIndex })}>{entry.grade_value ?? '·'}{entry.grade_comment && <span title={entry.grade_comment}> *</span>}</button>
+      return <button className={`grade-cell ${entry.grade_value != null ? `tone-${gradeTone(entry.grade_value)}` : 'grade-empty'} ${entry.grade_id === 'pending' ? 'saving' : ''} ${justSaved === `${entry.student_id}:${entry.lesson_work_id}` ? 'just-saved' : ''}`} data-grade-cell data-row={info.row.index} data-col={columnIndex} aria-label={`${info.row.original.student.display_name}, ${formatDate(work.lesson_date)}, оценка ${entry.grade_value ?? 'не выставлена'}`} onClick={() => setEditing({ entry, row: info.row.index, col: columnIndex })}>{entry.grade_value ?? '·'}{entry.grade_comment && <span title={entry.grade_comment}> *</span>}</button>
     } })),
-    helper.accessor('average', { id: 'average', header: 'Средний балл', size: 110, cell: (info) => <strong>{info.getValue()?.toFixed(2) ?? '—'}</strong> }),
-  ], [helper, works, compact])
+    helper.accessor('average', { id: 'average', header: 'Средний балл', size: 110, cell: (info) => <strong>{info.getValue()?.toFixed(2).replace('.', ',') ?? '—'}</strong> }),
+  ], [helper, works, compact, justSaved])
   const table = useReactTable({ data: rows, columns, getCoreRowModel: getCoreRowModel() })
   const virtualizer = useVirtualizer({ count: table.getRowModel().rows.length, getScrollElement: () => scrollRef.current, estimateSize: () => compact ? 44 : 56, overscan: 10 })
   const focusCell = (row: number, col: number) => {
@@ -74,8 +81,8 @@ export function JournalTable({ entries, students, allowedValues, onSave, isSavin
   // Редактор показывает актуальную серверную запись, а не снимок на момент открытия.
   const liveEntry = editing ? entries.find((item) => item.student_id === editing.entry.student_id && item.lesson_work_id === editing.entry.lesson_work_id) ?? editing.entry : null
   if (!works.length) return <div className="state-view"><h3>В выбранном периоде нет работ</h3><p>Выберите урок и добавьте классную или контрольную работу, чтобы выставлять оценки.</p></div>
-  return <><div className={`journal-scroll ${compact ? 'compact' : ''}`} ref={scrollRef} onKeyDown={keyboard}><table className="journal-table"><thead>{table.getHeaderGroups().map((group) => <tr key={group.id}>{group.headers.map((header) => <th key={header.id} style={{ width: header.getSize() }} className={header.id === 'student' ? 'sticky-student' : header.id === 'average' ? 'sticky-average' : ''}>{flexRender(header.column.columnDef.header, header.getContext())}</th>)}</tr>)}</thead><tbody style={{ height: virtualizer.getTotalSize() }}>{virtualizer.getVirtualItems().map((virtualRow) => {
+  return <><div className={`journal-scroll ${compact ? 'compact' : ''}`} ref={scrollRef} onKeyDown={keyboard}><table className="journal-table" style={{ width: table.getTotalSize() }}><thead>{table.getHeaderGroups().map((group) => <tr key={group.id}>{group.headers.map((header) => <th key={header.id} style={{ width: header.getSize() }} className={header.id === 'student' ? 'sticky-student' : header.id === 'average' ? 'sticky-average' : ''}>{flexRender(header.column.columnDef.header, header.getContext())}</th>)}</tr>)}</thead><tbody style={{ height: virtualizer.getTotalSize() }}>{virtualizer.getVirtualItems().map((virtualRow) => {
     const row = table.getRowModel().rows[virtualRow.index]!
     return <tr key={row.id} style={{ height: virtualRow.size, transform: `translateY(${virtualRow.start}px)` }}>{row.getVisibleCells().map((cell) => <td key={cell.id} style={{ width: cell.column.getSize() }} className={cell.column.id === 'student' ? 'sticky-student' : cell.column.id === 'average' ? 'sticky-average' : ''}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>)}</tr>
-  })}</tbody></table></div><GradeEditor entry={liveEntry} initialValue={editing?.initialValue} open={Boolean(editing)} onOpenChange={(open) => { if (!open) setEditing(null) }} allowedValues={allowedValues} onSave={(input, done) => { const position = editing; onSave(input, () => { done?.(); if (position) focusCell(position.row + 1, position.col) }) }} isSaving={isSaving} conflict={conflict} onCloseConflict={onCloseConflict} /></>
+  })}</tbody></table></div><GradeEditor entry={liveEntry} initialValue={editing?.initialValue} open={Boolean(editing)} onOpenChange={(open) => { if (!open) setEditing(null) }} allowedValues={allowedValues} onSave={(input, done) => { const position = editing; onSave(input, () => { done?.(); setJustSaved(`${input.entry.student_id}:${input.entry.lesson_work_id}`); if (position) focusCell(position.row + 1, position.col) }) }} isSaving={isSaving} conflict={conflict} onCloseConflict={onCloseConflict} /></>
 }

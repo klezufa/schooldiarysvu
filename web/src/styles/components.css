@@ -1,0 +1,289 @@
+/* Общие компоненты. Иерархия поверхностей: панели лежат на «бумаге» с тонкой линией, приподняты только
+   интерактивные карточки и всплывающие слои; скругление растёт с высотой слоя. */
+
+/* ---------- Кнопки ---------- */
+.button {
+  position: relative;
+  min-height: 40px;
+  display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+  padding: .55rem 1rem;
+  border: 1px solid transparent; border-radius: var(--r-button);
+  font-weight: 600; font-size: var(--fs-3); line-height: 1.2; text-align: center; text-decoration: none;
+  transition: background-color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out), box-shadow var(--dur-2) var(--ease-out), transform var(--dur-1) var(--ease-out);
+}
+.button:active:not(:disabled) { transform: scale(.98); }
+.button svg { width: 1.05rem; height: 1.05rem; }
+.button.primary { background: var(--accent); color: var(--on-accent); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .16), 0 1px 2px rgba(20, 27, 45, .18); }
+.button.primary:hover:not(:disabled) { background: var(--accent-hover); }
+.button.secondary { background: var(--surface); color: var(--ink); border-color: var(--line-strong); box-shadow: var(--shadow-1); }
+.button.secondary:hover:not(:disabled) { background: var(--surface-2); border-color: var(--accent-line-strong); }
+.button.danger { background: var(--danger-soft); color: var(--danger); border-color: var(--danger-line); }
+.button.danger:hover:not(:disabled) { background: var(--danger-hover); }
+.button.text-button { padding-inline: .5rem; color: var(--accent-ink); background: transparent; }
+.button.text-button:hover:not(:disabled) { background: var(--accent-tint); }
+.button.small { min-height: 32px; padding: .3rem .7rem; font-size: var(--fs-2); border-radius: 8px; }
+.icon-button {
+  position: relative; width: 40px; min-width: 40px; height: 40px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid transparent; border-radius: var(--r-button);
+  background: transparent; color: var(--ink-2);
+  transition: background-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out), transform var(--dur-1) var(--ease-out);
+}
+.icon-button:hover { background: var(--surface-3); color: var(--ink); }
+.icon-button:active { transform: scale(.94); }
+.danger-text { color: var(--danger); }
+.card-actions, .dialog-actions, .table-actions, .page-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; }
+
+/* ---------- Панели и заголовки секций ---------- */
+.panel { min-width: 0; padding: 1.35rem; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); }
+.span-2 { grid-column: span 2; }
+.section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+.section-heading h2, .section-heading p { margin-bottom: .15rem; }
+.section-heading > a { display: inline-flex; align-items: center; gap: .3rem; padding: .25rem .4rem; margin: -.25rem -.4rem; border-radius: 6px; font-size: var(--fs-2); font-weight: 600; text-decoration: none; white-space: nowrap; }
+.section-heading > a:hover { background: var(--accent-tint); }
+.section-heading > a svg { width: .95rem; height: .95rem; transition: transform var(--dur-2) var(--ease-out); }
+.section-heading > a:hover svg { transform: translateX(2px); }
+.page-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 1rem; margin-bottom: 1.75rem; }
+.page-header h1 { margin-bottom: .3rem; }
+.page-header p:not(.eyebrow) { max-width: 68ch; margin-bottom: 0; color: var(--muted); }
+.toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; margin-bottom: 1.25rem; }
+
+/* ---------- Бейджи и метки ---------- */
+.badge { display: inline-flex; align-items: center; gap: .3rem; width: fit-content; min-height: 22px; padding: .1rem .55rem; border: 1px solid var(--line); border-radius: var(--r-pill); background: var(--surface-2); color: var(--ink-2); font-size: var(--fs-1); font-weight: 600; line-height: 1.3; white-space: nowrap; }
+.badge-success { color: var(--success); background: var(--success-soft); border-color: var(--success-line); }
+.badge-warning { color: var(--warning); background: var(--warning-soft); border-color: var(--warning-line); }
+.badge-danger { color: var(--danger); background: var(--danger-soft); border-color: var(--danger-line); }
+.badge-info { color: var(--accent-ink); background: var(--accent-soft); border-color: var(--accent-line); }
+.role-pills { display: flex; flex-wrap: wrap; gap: .3rem; }
+.role-pill { padding: .1rem .5rem; border-radius: 6px; background: var(--surface-3); color: var(--ink-2); font-size: var(--fs-1); font-weight: 600; white-space: nowrap; }
+.role-pill.role-system_admin { background: var(--board); color: var(--board-ink); }
+.role-pill.role-administrator { background: var(--accent-soft); color: var(--accent-ink); }
+.role-pill.role-teacher, .role-pill.role-class_teacher { background: var(--hue-green-wash); color: var(--hue-green); }
+.role-pill.role-student { background: var(--hue-amber-wash); color: var(--hue-amber); }
+.role-pill.role-parent { background: var(--hue-violet-wash); color: var(--hue-violet); }
+.role-pill.role-principal { background: var(--hue-rose-wash); color: var(--hue-rose); }
+.kind-pill { padding: .1rem .5rem; border-radius: 6px; font-size: var(--fs-1); font-weight: 600; white-space: nowrap; background: var(--hue-blue-wash); color: var(--hue-blue); }
+.kind-pill.kind-grade, .kind-pill.kind-lesson { background: var(--hue-green-wash); color: var(--hue-green); }
+.kind-pill.kind-user, .kind-pill.kind-invitation { background: var(--hue-amber-wash); color: var(--hue-amber); }
+.kind-pill.kind-enrollment, .kind-pill.kind-schedule_entry, .kind-pill.kind-lesson_batch { background: var(--hue-violet-wash); color: var(--hue-violet); }
+
+/* ---------- Поля ввода ---------- */
+input, select, textarea {
+  width: 100%; min-height: 40px;
+  padding: .55rem .75rem;
+  border: 1px solid var(--line-strong); border-radius: var(--r-field);
+  background: var(--surface); color: var(--ink);
+  font-size: var(--fs-3);
+  transition: border-color var(--dur-1) var(--ease-out), box-shadow var(--dur-2) var(--ease-out);
+}
+input::placeholder, textarea::placeholder { color: var(--faint); }
+input:hover:not(:disabled):not(:focus), select:hover:not(:disabled):not(:focus), textarea:hover:not(:disabled):not(:focus) { border-color: var(--faint); }
+input:focus, select:focus, textarea:focus { border-color: var(--accent); outline: none; box-shadow: var(--focus-ring); }
+input:disabled, select:disabled, textarea:disabled { background: var(--surface-2); color: var(--muted); }
+textarea { resize: vertical; line-height: 1.5; }
+input[type="checkbox"], input[type="radio"] { width: 18px; min-width: 18px; height: 18px; min-height: 18px; padding: 0; accent-color: var(--accent); box-shadow: none; }
+input[type="file"] { padding: 0; border: 0; }
+.field { min-width: 0; display: flex; flex-direction: column; gap: .35rem; }
+.field > label, .admin-form > .field > label { font-size: var(--fs-2); font-weight: 600; color: var(--ink-2); }
+.field small { color: var(--muted); font-size: var(--fs-1); }
+.field-error { color: var(--danger) !important; }
+.field-invalid input, .field-invalid select, .field-invalid textarea { border-color: var(--danger); }
+.form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.stack-form { display: flex; flex-direction: column; gap: 1rem; }
+.form-error { padding: .75rem .9rem; border: 1px solid var(--danger-line); border-radius: var(--r-button); background: var(--danger-soft); color: var(--danger); font-size: var(--fs-2); }
+.checkbox-label { display: flex; align-items: center; gap: .55rem; font-size: var(--fs-3); }
+.inline-label { display: flex; align-items: center; gap: .5rem; font-size: var(--fs-2); }
+.inline-label select { min-width: 180px; }
+.toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 64px; }
+.toggle-row > span { display: flex; flex-direction: column; gap: .2rem; }
+.toggle-row small { color: var(--muted); }
+.input-with-icon { position: relative; }
+.input-with-icon svg { position: absolute; top: 50%; left: 12px; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.input-with-icon input { padding-left: 2.5rem; }
+.input-action { display: flex; align-items: center; gap: .35rem; }
+.input-action input { flex: 1; }
+.password-input input { padding-right: 3rem; }
+.password-input .reveal { position: absolute; top: 50%; right: 2px; transform: translateY(-50%); width: 38px; min-width: 38px; height: 38px; }
+.password-input .reveal svg { position: static; transform: none; }
+.filter-bar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .75rem; margin-bottom: 1rem; }
+.filter-bar label, .journal-filters label, .journal-toolbar label, .report-filters label, .homework-toolbar label, .audit-filters label, .schedule-scope label {
+  display: flex; flex-direction: column; gap: .3rem; color: var(--muted); font-size: var(--fs-1); font-weight: 600;
+}
+.filter-bar label { min-width: 160px; }
+/* Флажок в строке фильтров стоит рядом с подписью, на уровне полей. */
+.filter-bar label.checkbox-label, .homework-toolbar label.checkbox-label, .journal-toolbar label.checkbox-label { flex-direction: row; align-items: center; min-height: 40px; color: var(--ink-2); font-size: var(--fs-3); font-weight: 500; }
+.filter-bar .grow { flex: 1; min-width: 220px; }
+.checkbox-group { display: flex; flex-wrap: wrap; gap: .5rem 1rem; margin: 0; padding: 0; border: 0; }
+.checkbox-group legend, .choice-group legend, .pair-editor legend, .grade-picker legend { margin-bottom: .4rem; font-size: var(--fs-2); font-weight: 600; color: var(--ink-2); }
+.checkbox-group label { min-height: 44px; display: inline-flex; align-items: center; gap: .5rem; }
+.checkbox-group small { flex-basis: 100%; color: var(--muted); }
+.choice-group { display: flex; flex-direction: column; gap: .25rem; margin: 0; padding: 0; border: 0; }
+.choice-group label { min-height: 40px; display: inline-flex; align-items: center; gap: .55rem; }
+.choice-group input, .checkbox-group input { width: auto; min-height: 0; }
+
+/* ---------- Переключатели и вкладки ---------- */
+.segmented { position: relative; display: inline-flex; max-width: 100%; padding: 3px; gap: 2px; background: var(--surface-3); border-radius: var(--r-button); overflow-x: auto; scrollbar-width: none; }
+.segmented button { position: relative; min-height: 34px; padding: .4rem .8rem; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: var(--fs-2); font-weight: 600; white-space: nowrap; transition: color var(--dur-1) var(--ease-out); }
+.segmented button:hover:not(.active) { color: var(--ink); }
+.segmented button.active { background: var(--surface-raised); color: var(--ink); box-shadow: var(--shadow-1); }
+.tabs { position: relative; display: flex; gap: .15rem; margin-bottom: 1.25rem; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+.tabs button { position: relative; min-height: 44px; display: inline-flex; align-items: center; gap: .45rem; padding: .6rem .8rem; border: 0; background: transparent; color: var(--muted); font-size: var(--fs-3); font-weight: 600; white-space: nowrap; transition: color var(--dur-1) var(--ease-out); }
+.tabs button:hover:not(.active) { color: var(--ink); }
+.tabs button::after { content: ""; position: absolute; left: .6rem; right: .6rem; bottom: -1px; height: 2px; border-radius: 2px; background: var(--accent); transform: scaleX(0); transition: transform var(--dur-2) var(--ease-out); }
+.tabs button.active { color: var(--ink); }
+.tabs button.active::after { transform: scaleX(1); }
+.tab-panel { min-height: 220px; }
+
+/* ---------- Состояния: загрузка, пусто, ошибка ---------- */
+.state-view { min-height: 180px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .5rem; padding: 2rem; text-align: center; color: var(--muted); }
+.state-view > svg { width: 2rem; height: 2rem; }
+.state-view h1, .state-view h2, .state-view h3, .state-view p { margin-bottom: 0; color: var(--ink); }
+.state-view p { max-width: 60ch; color: var(--muted); }
+.state-view small { color: var(--faint); font-family: var(--font-mono); font-size: var(--fs-1); }
+.empty-state { border: 1.5px dashed var(--line-strong); border-radius: var(--r-card); background: transparent; }
+.empty-state h3 { font-size: var(--fs-4); }
+.error-state > svg { color: var(--danger); }
+.conflict-state { padding: 1rem; border: 1px solid var(--warning-line); border-radius: var(--r-button); background: var(--warning-soft); color: var(--warning-ink); }
+.conflict-state dl { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+.conflict-state dt { font-size: var(--fs-1); }
+.conflict-state dd { margin: .2rem 0; font-weight: 650; }
+.spinner { width: 24px; height: 24px; border: 2.5px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
+/* Скелетон повторяет форму будущего содержимого, чтобы страница не прыгала после загрузки. */
+.skeleton-stack { display: flex; flex-direction: column; gap: .75rem; padding: .25rem 0; }
+.skeleton-row { display: flex; align-items: center; gap: .8rem; }
+.skeleton-row > div { flex: 1; display: flex; flex-direction: column; gap: .45rem; }
+.skeleton {
+  display: block; height: .8rem; border-radius: 6px;
+  background: linear-gradient(90deg, var(--surface-3) 0%, var(--surface-2) 45%, var(--surface-3) 90%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+.skeleton.circle { width: 36px; height: 36px; flex: none; border-radius: 10px; }
+.skeleton.w-40 { width: 40%; } .skeleton.w-60 { width: 60%; } .skeleton.w-80 { width: 80%; }
+.skeleton.block { height: 160px; border-radius: var(--r-button); }
+@media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
+
+/* ---------- Сообщения на странице ---------- */
+.notice { display: flex; gap: .65rem; padding: .8rem 1rem; border: 1px solid var(--warning-line); border-radius: var(--r-button); background: var(--warning-soft); color: var(--warning-ink); font-size: var(--fs-2); line-height: 1.5; }
+.notice svg { flex: none; margin-top: .1rem; }
+.notice.info { border-color: var(--accent-line); background: var(--accent-soft); color: var(--ink-2); }
+.notice.info svg { color: var(--accent-ink); }
+.notice.success { border-color: var(--success-line); background: var(--success-soft); color: var(--success-ink); }
+.notice.danger { border-color: var(--danger-line); background: var(--danger-soft); color: var(--danger); }
+.offline-banner { position: relative; z-index: var(--z-dialog); display: flex; align-items: center; justify-content: center; gap: .6rem; padding: .6rem 1rem; background: var(--warning-soft); color: var(--warning-ink); border-bottom: 1px solid var(--warning-line); font-size: var(--fs-2); }
+.insecure-notice { margin-bottom: 1rem; }
+.alert-list { display: flex; flex-direction: column; gap: .6rem; margin: 0; padding: 0; list-style: none; }
+.alert-item { display: flex; align-items: flex-start; gap: .75rem; padding: .8rem .9rem; border: 1px solid; border-radius: var(--r-button); }
+.alert-item > svg { margin-top: .1rem; }
+.alert-item div { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: .15rem; }
+.alert-item strong { font-size: var(--fs-3); }
+.alert-item span { color: var(--ink-2); font-size: var(--fs-2); }
+.alert-item a { align-self: center; white-space: nowrap; font-size: var(--fs-2); font-weight: 600; }
+.alert-danger { background: var(--danger-soft); border-color: var(--danger-line); } .alert-danger > svg { color: var(--danger); }
+.alert-warning { background: var(--warning-soft); border-color: var(--warning-line); } .alert-warning > svg { color: var(--warning); }
+.alert-info { background: var(--accent-soft); border-color: var(--accent-line); } .alert-info > svg { color: var(--accent-ink); }
+.secret-box { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .9rem 1rem; border: 1.5px dashed var(--accent-line-strong); border-radius: var(--r-button); background: var(--accent-soft); }
+.secret-box code { font-size: 1.15rem; font-weight: 700; letter-spacing: .06em; overflow-wrap: anywhere; }
+
+/* ---------- Таблицы ---------- */
+.responsive-table { position: relative; max-width: 100%; overflow-x: auto; }
+.responsive-table table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--fs-3); }
+.responsive-table th { padding: .6rem .7rem; border-bottom: 1px solid var(--line); background: var(--surface-2); color: var(--muted); font-size: var(--fs-1); font-weight: 600; text-align: left; white-space: nowrap; }
+.responsive-table th:first-child { border-top-left-radius: var(--r-field); }
+.responsive-table th:last-child { border-top-right-radius: var(--r-field); }
+.responsive-table td { padding: .7rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+.responsive-table tbody tr { transition: background-color var(--dur-1) var(--ease-out); }
+.responsive-table tbody tr:hover { background: var(--accent-tint); }
+.pagination, .pager { display: flex; align-items: center; justify-content: center; gap: 1rem; margin-top: 1rem; color: var(--muted); font-size: var(--fs-2); }
+.pager { justify-content: space-between; }
+
+/* ---------- Окна (Radix Dialog): анимация по data-state, Radix ждёт её конца при закрытии ---------- */
+.dialog-overlay { position: fixed; z-index: var(--z-overlay); inset: 0; background: var(--overlay); backdrop-filter: blur(2px); }
+.dialog-overlay[data-state="open"] { animation: fade var(--dur-2) var(--ease-out); }
+.dialog-overlay[data-state="closed"] { animation: fade-out var(--dur-1) var(--ease-in) forwards; }
+.dialog-content {
+  position: fixed; z-index: var(--z-dialog); top: 50%; left: 50%;
+  width: min(560px, calc(100vw - 2rem)); max-height: min(88vh, 900px); overflow-y: auto;
+  transform: translate(-50%, -50%);
+  padding: 1.5rem; border-radius: var(--r-dialog);
+  background: var(--surface-raised); box-shadow: var(--shadow-3);
+  overscroll-behavior: contain;
+}
+.dialog-content[data-state="open"] { animation: dialog-in var(--dur-3) var(--ease-out); }
+.dialog-content[data-state="closed"] { animation: dialog-out var(--dur-1) var(--ease-in) forwards; }
+.dialog-content:focus { outline: none; }
+.dialog-wide { width: min(860px, calc(100vw - 2rem)); }
+.dialog-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1.25rem; }
+.dialog-heading h2 { margin-bottom: .2rem; font-size: var(--fs-6); }
+.dialog-heading p { margin-bottom: 0; color: var(--muted); font-size: var(--fs-3); }
+@keyframes fade-out { to { opacity: 0; } }
+@keyframes dialog-in { from { opacity: 0; transform: translate(-50%, -48%) scale(.97); } }
+@keyframes dialog-out { to { opacity: 0; transform: translate(-50%, -49%) scale(.98); } }
+@keyframes sheet-in { from { transform: translateY(100%); } }
+@keyframes sheet-out { to { transform: translateY(100%); } }
+
+/* ---------- Всплывающие уведомления ---------- */
+.toast-region { position: fixed; z-index: var(--z-toast); right: 1rem; bottom: 1rem; width: min(400px, calc(100vw - 2rem)); display: flex; flex-direction: column; gap: .5rem; pointer-events: none; }
+.toast { display: flex; align-items: center; gap: .7rem; padding: .7rem .7rem .7rem 1rem; border: 1px solid var(--line); border-radius: var(--r-card); background: var(--surface-raised); color: var(--ink); box-shadow: var(--shadow-2); font-size: var(--fs-3); pointer-events: auto; }
+.toast::before { content: ""; align-self: stretch; width: 3px; margin: .1rem 0; border-radius: 3px; background: var(--accent); }
+.toast > span { flex: 1; }
+.toast-error::before { background: var(--danger); }
+.toast-success::before { background: var(--success); }
+
+/* ---------- Списки событий и метки на главных ---------- */
+.event-list { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.event-list li { display: flex; align-items: center; gap: .8rem; padding: .7rem 0; border-bottom: 1px solid var(--line); }
+.event-list li:last-child { border-bottom: 0; }
+.event-icon { width: 36px; height: 36px; flex: none; display: grid; place-items: center; border-radius: 10px; background: var(--hue-violet-wash); color: var(--hue-violet); }
+.event-icon svg { width: 1.05rem; height: 1.05rem; }
+.event-icon.tone-green { background: var(--hue-green-wash); color: var(--hue-green); }
+.event-icon.tone-amber { background: var(--hue-amber-wash); color: var(--hue-amber); }
+.event-icon.tone-rose { background: var(--hue-rose-wash); color: var(--hue-rose); }
+.event-icon.tone-blue { background: var(--hue-blue-wash); color: var(--hue-blue); }
+.event-body { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: .1rem; }
+.event-body strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-3); font-weight: 600; }
+.event-body span { overflow: hidden; color: var(--muted); font-size: var(--fs-2); text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- Палитра команд ---------- */
+.command-dialog { top: 12vh; width: min(620px, calc(100vw - 2rem)); max-height: min(70vh, 560px); display: flex; flex-direction: column; padding: 0; overflow: hidden; transform: translateX(-50%); }
+.command-dialog[data-state="open"] { animation: command-in var(--dur-3) var(--ease-out); }
+.command-dialog[data-state="closed"] { animation: command-out var(--dur-1) var(--ease-in) forwards; }
+@keyframes command-in { from { opacity: 0; transform: translateX(-50%) translateY(-8px) scale(.98); } }
+@keyframes command-out { to { opacity: 0; transform: translateX(-50%) scale(.98); } }
+.command-search { display: flex; align-items: center; gap: .65rem; padding: .35rem 1rem; border-bottom: 1px solid var(--line); }
+.command-search svg { color: var(--muted); }
+.command-search input { min-height: 52px; padding: 0; border: 0; background: transparent; font-size: var(--fs-4); box-shadow: none; }
+.command-search input:focus { box-shadow: none; }
+.command-list { flex: 1; overflow-y: auto; margin: 0; padding: .4rem; list-style: none; }
+.command-group { padding: .6rem .7rem .3rem; color: var(--muted); font-size: var(--fs-1); font-weight: 600; }
+.command-item { min-height: 44px; display: flex; align-items: center; gap: .75rem; padding: .5rem .7rem; border-radius: var(--r-button); color: var(--ink); cursor: pointer; }
+.command-item svg { color: var(--muted); }
+.command-item small { margin-left: auto; color: var(--faint); font-size: var(--fs-1); }
+.command-item[aria-selected="true"] { background: var(--accent-soft); color: var(--accent-ink); }
+.command-item[aria-selected="true"] svg { color: var(--accent-ink); }
+.command-empty { padding: 2rem 1rem; color: var(--muted); text-align: center; }
+.command-foot { display: flex; gap: 1rem; padding: .55rem 1rem; border-top: 1px solid var(--line); background: var(--surface-2); color: var(--muted); font-size: var(--fs-1); }
+.command-foot span { display: inline-flex; align-items: center; gap: .3rem; }
+.command-foot kbd svg { width: .8em; height: .8em; }
+
+@media (max-width: 720px) {
+  .button, input, select { min-height: 44px; }
+  .icon-button { width: 44px; min-width: 44px; height: 44px; }
+  .form-row { grid-template-columns: 1fr; }
+  .page-header { flex-direction: column; align-items: stretch; margin-bottom: 1.25rem; }
+  .page-actions { width: 100%; }
+  .page-actions .button { flex: 1; }
+  .panel { padding: 1rem; }
+  .filter-bar label { min-width: 0; width: 100%; }
+  .conflict-state dl { grid-template-columns: 1fr; }
+  .table-actions { max-width: 100%; }
+  .toast-region { bottom: calc(5rem + env(safe-area-inset-bottom)); }
+  .offline-banner { align-items: flex-start; font-size: var(--fs-1); }
+  /* окна на телефоне — панель снизу */
+  .dialog-content, .dialog-wide { top: auto; bottom: 0; left: 0; width: 100%; max-height: 90vh; transform: none; padding: 1.2rem 1rem calc(1.2rem + env(safe-area-inset-bottom)); border-radius: var(--r-dialog) var(--r-dialog) 0 0; }
+  .dialog-content[data-state="open"] { animation: sheet-in var(--dur-3) var(--ease-out); }
+  .dialog-content[data-state="closed"] { animation: sheet-out var(--dur-2) var(--ease-in) forwards; }
+  .command-dialog { top: 0; bottom: auto; max-height: 100dvh; height: 100dvh; border-radius: 0; padding: 0; }
+  .command-dialog[data-state="open"] { animation: fade var(--dur-2) var(--ease-out); }
+  .command-dialog[data-state="closed"] { animation: fade-out var(--dur-1) var(--ease-in) forwards; }
+}

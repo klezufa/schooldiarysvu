@@ -27,6 +27,12 @@ export function MobileLesson({ lessons, students, entries, selectedLessonId, onS
   }, [entries, lesson?.id])
   const [workId, setWorkId] = useState('')
   const [editing, setEditing] = useState<{ entry: JournalEntry; initialValue?: number } | null>(null)
+  const [justSaved, setJustSaved] = useState<string | null>(null)
+  useEffect(() => {
+    if (!justSaved) return undefined
+    const timer = window.setTimeout(() => setJustSaved(null), 1200)
+    return () => window.clearTimeout(timer)
+  }, [justSaved])
   // Быстрые кнопки сохраняют без редактора: при конфликте открываем его, чтобы локальное значение не пропало молча.
   useEffect(() => { if (conflict) setEditing({ entry: conflict.entry, initialValue: conflict.value }) }, [conflict])
   useEffect(() => { if (works.length && !works.some((work) => work.lesson_work_id === workId)) setWorkId(works[0]!.lesson_work_id) }, [works, workId])
@@ -42,7 +48,7 @@ export function MobileLesson({ lessons, students, entries, selectedLessonId, onS
     {works.length > 1 && <label className="field">Работа на уроке<select value={workId} onChange={(event) => setWorkId(event.target.value)}>{works.map((item) => <option key={item.lesson_work_id} value={item.lesson_work_id}>{workNames[item.work_type]} · {item.work_title}</option>)}</select></label>}
     {!work ? <Empty title="На уроке нет работ" text="Добавьте работу кнопкой выше, затем выставьте оценки." /> : <div className="mobile-students">{students.map((student) => {
       const entry = entryFor(student)!
-      return <article className="mobile-student" key={student.id}><button className="mobile-student-name" onClick={() => setEditing({ entry })}><strong>{student.display_name}</strong><span>{entry.grade_comment || 'Оценка и комментарий'}</span></button><div className="mobile-grade-buttons" aria-label={`Оценка для ${student.display_name}`}>{allowedValues.map((value) => <button key={value} aria-pressed={entry.grade_value === value} className={entry.grade_value === value ? 'selected' : ''} disabled={isSaving} onClick={() => onSave({ entry, value, comment: entry.grade_comment ?? '' })}>{value}</button>)}</div></article>
+      return <article className="mobile-student" key={student.id}><button className="mobile-student-name" onClick={() => setEditing({ entry })}><strong>{student.display_name}</strong><span>{entry.grade_comment || 'Оценка и комментарий'}</span></button><div className="mobile-grade-buttons" aria-label={`Оценка для ${student.display_name}`}>{allowedValues.map((value) => <button key={value} aria-pressed={entry.grade_value === value} className={`${entry.grade_value === value ? 'selected' : ''} ${justSaved === `${entry.student_id}:${value}` ? 'just-saved' : ''}`} disabled={isSaving} onClick={() => onSave({ entry, value, comment: entry.grade_comment ?? '' }, () => setJustSaved(`${entry.student_id}:${value}`))}>{value}</button>)}</div></article>
     })}</div>}
     <AttendancePanel lessonId={lesson.id} students={students} compact />
     <GradeEditor entry={editing ? entries.find((item) => item.student_id === editing.entry.student_id && item.lesson_work_id === editing.entry.lesson_work_id) ?? editing.entry : null} initialValue={editing?.initialValue} open={Boolean(editing)} onOpenChange={(open) => { if (!open) setEditing(null) }} allowedValues={allowedValues} onSave={onSave} isSaving={isSaving} conflict={conflict} onCloseConflict={onCloseConflict}

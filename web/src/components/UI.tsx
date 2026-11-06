@@ -7,6 +7,21 @@ export function Loading({ label = 'Загружаем данные…' }: { labe
   return <div className="state-view" role="status"><span className="spinner" aria-hidden="true" /><p>{label}</p></div>
 }
 
+/** Скелетон списка: повторяет форму строк, пока данные загружаются, чтобы страница не прыгала. */
+export function Skeleton({ rows = 3, label = 'Загружаем данные…' }: { rows?: number; label?: string }): React.JSX.Element {
+  return (
+    <div className="skeleton-stack" role="status" aria-live="polite">
+      <span className="sr-only">{label}</span>
+      {Array.from({ length: rows }, (_, index) => (
+        <div className="skeleton-row" key={index} aria-hidden="true">
+          <span className="skeleton circle" />
+          <div><span className={`skeleton ${index % 2 ? 'w-60' : 'w-80'}`} /><span className="skeleton w-40" /></div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function Empty({ title, text, action }: { title: string; text?: string; action?: ReactNode }): React.JSX.Element {
   return <div className="state-view empty-state"><h3>{title}</h3>{text && <p>{text}</p>}{action}</div>
 }
@@ -32,7 +47,7 @@ export function StateView({ error, retry }: { error: unknown; retry?: () => void
 export function QueryState({ isLoading, error, retry, isEmpty, emptyTitle, emptyText, children }: {
   isLoading: boolean; error: unknown; retry?: () => void; isEmpty?: boolean; emptyTitle?: string; emptyText?: string; children: ReactNode
 }): React.JSX.Element {
-  if (isLoading) return <Loading />
+  if (isLoading) return <Skeleton />
   if (error) return <StateView error={error} retry={retry} />
   if (isEmpty) return <Empty title={emptyTitle ?? 'Данных пока нет'} text={emptyText} />
   return <>{children}</>

@@ -1,4 +1,5 @@
-/** Векторные иллюстрации интерфейса (без внешних изображений: система работает в закрытой сети школы). */
+/** Векторные иллюстрации интерфейса (без внешних изображений: система работает в закрытой сети школы).
+ *  Цвета задают классы .ill-* в styles/pages.css через токены, поэтому рисунки следуют теме. */
 
 export function BookMark(): React.JSX.Element {
   return (
@@ -9,65 +10,78 @@ export function BookMark(): React.JSX.Element {
   )
 }
 
-/** Стопка книг, стакан с карандашами и глобус — для приветственного баннера. */
+/** Линии клетки внутри прямоугольника: шаг step, без SVG-паттернов, чтобы не плодить id на странице. */
+function GridLines({ x, y, width, height, step }: { x: number; y: number; width: number; height: number; step: number }): React.JSX.Element {
+  const lines: string[] = []
+  for (let lineX = x + step; lineX < x + width; lineX += step) lines.push(`M${lineX} ${y}V${y + height}`)
+  for (let lineY = y + step; lineY < y + height; lineY += step) lines.push(`M${x} ${lineY}H${x + width}`)
+  return <path className="ill-grid" d={lines.join('')} />
+}
+
+/** Тетрадь в клетку с записями чернилами, пятёркой на полях и карандашом — для приветствия на главной. */
 export function DeskIllustration(): React.JSX.Element {
   return (
-    <svg viewBox="0 0 260 190" role="img" aria-label="Книги, карандаши и глобус">
-      <ellipse cx="135" cy="176" rx="118" ry="10" fill="#c9daf8" opacity=".6" />
-      <rect x="22" y="140" width="112" height="22" rx="4" fill="#2463eb" />
-      <rect x="22" y="140" width="112" height="6" rx="3" fill="#5b8def" />
-      <rect x="30" y="118" width="98" height="22" rx="4" fill="#eb6834" />
-      <rect x="30" y="118" width="98" height="6" rx="3" fill="#f59a72" />
-      <rect x="18" y="96" width="104" height="22" rx="4" fill="#1baf7a" />
-      <rect x="18" y="96" width="104" height="6" rx="3" fill="#5fd3a8" />
-      <rect x="26" y="162" width="104" height="6" rx="2" fill="#f4f7fc" />
-      <rect x="140" y="98" width="44" height="64" rx="8" fill="#10244b" />
-      <rect x="148" y="40" width="7" height="62" rx="2" transform="rotate(-8 151 71)" fill="#eda100" />
-      <rect x="160" y="34" width="7" height="68" rx="2" fill="#e34948" />
-      <rect x="172" y="44" width="7" height="58" rx="2" transform="rotate(9 175 73)" fill="#2a78d6" />
-      <path d="M150 40l3.5-9 3.5 9z" transform="rotate(-8 151 71)" fill="#f7d79a" />
-      <path d="M160 34l3.5-9 3.5 9z" fill="#f4b3b3" />
-      <path d="M172 44l3.5-9 3.5 9z" transform="rotate(9 175 73)" fill="#b8d3f6" />
-      <circle cx="222" cy="92" r="34" fill="#5b8def" />
-      <path d="M200 74c10 4 14 12 10 20s4 14 12 12 14 6 12 14M230 60c-4 8 2 12 8 12s8 8 2 14" stroke="#1baf7a" strokeWidth="9" strokeLinecap="round" fill="none" />
-      <circle cx="222" cy="92" r="34" fill="none" stroke="#1a4fc4" strokeWidth="3" />
-      <path d="M180 92a42 42 0 0 0 42 42" stroke="#10244b" strokeWidth="5" strokeLinecap="round" fill="none" />
-      <rect x="216" y="134" width="12" height="20" rx="3" fill="#10244b" />
-      <rect x="204" y="152" width="36" height="10" rx="5" fill="#10244b" />
+    <svg viewBox="0 0 240 180" role="img" aria-label="Тетрадь в клетку с оценкой и карандаш">
+      <ellipse className="ill-shadow" cx="122" cy="166" rx="96" ry="8" />
+      <g transform="rotate(-6 120 90)">
+        <rect className="ill-paper-edge" x="40" y="22" width="150" height="138" rx="6" />
+        <rect className="ill-paper" x="36" y="18" width="150" height="138" rx="6" />
+        <GridLines x={36} y={18} width={150} height={138} step={10} />
+        <path className="ill-margin" d="M160 18v138" />
+        <path className="ill-ink" d="M50 40h62M50 60h84M50 80h52M50 100h74M50 120h40" />
+        <path className="ill-red" d="M176 46h-11l-2 9c6-3 14 0 12 7-1.6 6-10.5 7-13.5 3" />
+      </g>
+      <g transform="rotate(32 196 108)">
+        <rect className="ill-pencil" x="190" y="58" width="12" height="92" rx="2" />
+        <rect className="ill-pencil-band" x="190" y="58" width="12" height="10" rx="2" />
+        <path className="ill-pencil-wood" d="M190 150h12l-6 16z" />
+        <path className="ill-pencil-lead" d="M194.2 161.5h3.6l-1.8 4.5z" />
+      </g>
     </svg>
   )
 }
 
-/** Здание школы — для страницы входа. */
+/**
+ * Раскрытый школьный дневник: слева уроки на день, справа задания и колонка оценок с полями. В клетке оценки
+ * красная ручка один раз «пишет» пятёрку (stroke-dashoffset), при «уменьшить движение» пятёрка уже написана.
+ */
 export function SchoolIllustration(): React.JSX.Element {
-  const windows = []
-  for (let row = 0; row < 3; row += 1) {
-    for (let col = 0; col < 8; col += 1) {
-      if (col === 3 || col === 4) continue
-      windows.push(<rect key={`${row}-${col}`} x={58 + col * 40} y={116 + row * 38} width="22" height="24" rx="3" fill="#cfe0ff" opacity={0.92} />)
-    }
-  }
+  const rows = [0, 1, 2, 3, 4]
   return (
-    <svg viewBox="0 0 440 300" role="img" aria-label="Здание школы">
-      <ellipse cx="220" cy="284" rx="210" ry="14" fill="#0b1a39" opacity=".35" />
-      <rect x="40" y="96" width="360" height="184" rx="8" fill="#f4f7fc" />
-      <rect x="40" y="96" width="360" height="14" fill="#dbe6ff" />
-      <rect x="162" y="64" width="116" height="216" rx="8" fill="#ffffff" />
-      <path d="M150 70 220 26l70 44z" fill="#2463eb" />
-      <rect x="196" y="82" width="48" height="48" rx="24" fill="#2463eb" />
-      <path d="M210 96v20M220 92v24M230 96v20" stroke="white" strokeWidth="3" strokeLinecap="round" />
-      {windows}
-      <rect x="196" y="216" width="48" height="64" rx="4" fill="#173264" />
-      <rect x="182" y="150" width="76" height="40" rx="4" fill="#cfe0ff" />
-      <path d="M220 150v40M182 170h76" stroke="#ffffff" strokeWidth="3" />
-      <rect x="40" y="270" width="360" height="10" fill="#c3cfe2" />
-      <circle cx="26" cy="232" r="26" fill="#1baf7a" />
-      <circle cx="414" cy="226" r="30" fill="#1baf7a" />
-      <circle cx="404" cy="200" r="20" fill="#3cc28f" />
-      <rect x="22" y="240" width="8" height="40" fill="#0e7f5a" />
-      <rect x="410" y="240" width="8" height="40" fill="#0e7f5a" />
-      <path d="M220 10v18" stroke="#ffffff" strokeWidth="3" />
-      <path d="M220 10h22l-6 6 6 6h-22" fill="#e34948" />
+    <svg viewBox="0 0 440 300" role="img" aria-label="Раскрытый школьный дневник с пятёркой">
+      <ellipse className="ill-shadow-dark" cx="220" cy="282" rx="196" ry="12" />
+      <path className="ill-paper-edge" d="M28 52 216 44v232L28 272Z M224 44l188 8v220l-188 4Z" />
+      <path className="ill-paper" d="M24 46 214 38v232L24 266Z" />
+      <path className="ill-paper" d="M226 38l190 8v220l-190 4Z" />
+      <path className="ill-spine" d="M214 38v232M226 38v232" />
+      {/* левая страница: день недели и уроки */}
+      <path className="ill-ink-strong" d="M44 66h64" />
+      {rows.map((row) => (
+        <g key={`left-${row}`}>
+          <path className="ill-rule" d={`M40 ${96 + row * 34}H200`} />
+          <path className="ill-ink" d={`M48 ${88 + row * 34}h${[58, 44, 66, 38, 52][row]}`} />
+          <path className="ill-ink-soft" d={`M128 ${88 + row * 34}h${[50, 62, 34, 56, 44][row]}`} />
+        </g>
+      ))}
+      {/* правая страница: задания, колонка оценок и поля */}
+      <path className="ill-margin" d="M372 46v222" />
+      <path className="ill-rule-strong" d="M330 46v222" />
+      {rows.map((row) => (
+        <g key={`right-${row}`}>
+          <path className="ill-rule" d={`M240 ${96 + row * 34}H400`} />
+          <path className="ill-ink-soft" d={`M250 ${88 + row * 34}h${[64, 48, 70, 40, 58][row]}`} />
+        </g>
+      ))}
+      <path className="ill-red ill-write" d="M358 112h-12l-2.5 10.5c7-3.5 15.5 0 13.5 8-1.8 7-12 8-15.5 3.5" />
+      <path className="ill-red ill-write ill-write-late" d="M380 128c4-6 9-6 10-1s-6 9 2 8" />
+      {/* ручка с красной пастой */}
+      <g className="ill-pen">
+        <g transform="rotate(38 372 170)">
+          <rect className="ill-pen-body" x="366" y="150" width="11" height="100" rx="5.5" />
+          <rect className="ill-pen-cap" x="366" y="214" width="11" height="36" rx="5.5" />
+          <path className="ill-pen-tip" d="M366.5 152 371.5 134l5 18z" />
+        </g>
+      </g>
     </svg>
   )
 }

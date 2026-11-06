@@ -1,21 +1,20 @@
 import type { CSSProperties } from 'react'
 
-/** Полоса предмета и бледная заливка карточки. Цвет следует за предметом, а не за его позицией в списке. */
-const palette: { stripe: string; wash: string }[] = [
-  { stripe: '#2a78d6', wash: '#e8f1fd' },
-  { stripe: '#eb6834', wash: '#fdeee7' },
-  { stripe: '#1baf7a', wash: '#e3f6ef' },
-  { stripe: '#eda100', wash: '#fdf3dc' },
-  { stripe: '#e87ba4', wash: '#fdedf3' },
-  { stripe: '#008300', wash: '#e2f2e2' },
-  { stripe: '#6250d6', wash: '#eeecfb' },
-  { stripe: '#e34948', wash: '#fdeaea' },
-]
+/** Полоса предмета и бледная заливка карточки. Цвет следует за предметом, а не за его позицией в списке;
+ *  сами оттенки — токены --subj-N в styles/tokens.css, у тёмной темы свои ступени. */
+const palette: { stripe: string; wash: string }[] = Array.from({ length: 8 }, (_, index) => ({
+  stripe: `var(--subj-${index + 1})`,
+  wash: `var(--subj-${index + 1}-wash)`,
+}))
 
+/** FNV-1a: у хеша «× 31» остаток от деления на 8 почти не зависит от букв, и разные предметы получали один цвет. */
 function hash(value: string): number {
-  let result = 0
-  for (const char of value.trim().toLowerCase()) result = (result * 31 + char.codePointAt(0)!) >>> 0
-  return result
+  let result = 0x811c9dc5
+  for (const char of value.trim().toLowerCase()) {
+    result ^= char.codePointAt(0)!
+    result = Math.imul(result, 0x01000193)
+  }
+  return result >>> 16
 }
 
 export function subjectColor(name?: string | null): { stripe: string; wash: string } {

@@ -1,21 +1,34 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Bell, Link2Off, LogOut, Menu, ShieldHalf, X } from 'lucide-react'
+import * as Dialog from '@radix-ui/react-dialog'
+import * as m from 'motion/react-m'
+import { Bell, Link2Off, LogOut, Menu, Moon, Search, ShieldHalf, Sun, X } from 'lucide-react'
 import { api, mutation, queryString } from '../api/client'
 import type { Notification } from '../api/types'
 import { roleNames } from '../api/types'
 import { navigationFor, type NavigationItem } from '../lib/navigation'
+import { isPlainClick, withViewTransition } from '../lib/viewTransition'
 import { useAuth } from '../authContext'
 import { useStudent } from '../studentContext'
+import { useTheme } from '../themeContext'
 import { dateISO, formatDate } from '../lib/dates'
 import { BookMark } from './Illustrations'
+import { CommandPalette } from './CommandPalette'
 import { Modal, OfflineBanner, QueryState, StatusBadge } from './UI'
 
 const sectionTitles: Record<NavigationItem['section'], string> = { study: 'Учёба', manage: 'Управление', account: 'Профиль' }
+const indicatorSpring = { type: 'spring', stiffness: 520, damping: 40, mass: .9 } as const
 
-function Navigation({ onNavigate }: { onNavigate?: () => void }): React.JSX.Element {
+/** Переход по пункту меню внутри View Transition; Ctrl/Shift-щелчок открывает ссылку как обычно. */
+function useSmoothNavigate(): (to: string) => void {
+  const navigate = useNavigate()
+  return useCallback((to: string) => withViewTransition(() => navigate(to)), [navigate])
+}
+
+function Navigation({ onNavigate, indicator }: { onNavigate?: () => void; indicator: string }): React.JSX.Element {
   const { user } = useAuth()
+  const go = useSmoothNavigate()
   if (!user) return <></>
   const navigation = navigationFor(user)
   const sections = (['study', 'manage', 'account'] as const).filter((section) => navigation.some((item) => item.section === section))
@@ -25,9 +38,24 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }): React.JSX.Elem
         <div key={section} className="side-nav-group">
           {section !== 'study' && <div className="nav-section">{sectionTitles[section]}</div>}
           {navigation.filter((item) => item.section === section).map(({ to, label, icon: Icon }) => (
-            <NavLink key={to} to={to} onClick={onNavigate} className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}>
-              <Icon aria-hidden="true" />
-              <span>{label}</span>
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+              onClick={(event) => {
+                onNavigate?.()
+                if (!isPlainClick(event)) return
+                event.preventDefault()
+                go(to)
+              }}
+            >
+              {({ isActive }) => (
+                <>
+                  {isActive && <m.span layoutId={indicator} className="nav-indicator" transition={indicatorSpring} aria-hidden="true" />}
+                  <Icon aria-hidden="true" />
+                  <span>{label}</span>
+                </>
+              )}
             </NavLink>
           ))}
         </div>
@@ -83,30 +111,96 @@ function UnlinkedParentNotice({ onlyParent }: { onlyParent: boolean }): React.JS
   )
 }
 
+/** Кнопка темы: переключает светлую и тёмную, новая тема раскрывается кругом от самой кнопки. */
+function ThemeToggle(): React.JSX.Element {
+  const { resolved, setChoice } = useTheme()
+  const next = resolved === 'dark' ? 'light' : 'dark'
+  return (
+    <button
+      type="button"
+      className="icon-button theme-toggle"
+      aria-label={next === 'dark' ? 'Включить тёмную тему' : 'Включить светлую тему'}
+      title={next === 'dark' ? 'Тёмная тема' : 'Светлая тема'}
+      onClick={(event) => {
+        const box = event.currentTarget.getBoundingClientRect()
+        setChoice(next, { x: box.left + box.width / 2, y: box.top + box.height / 2 })
+      }}
+    >
+      {resolved === 'dark' ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
+    </button>
+  )
+}
+
+/** «Ещё» на телефоне: панель снизу, закрывается кнопкой, щелчком по фону, Escape или свайпом вниз. */
+function MoreSheet({ open, onOpenChange, onSignOut }: { open: boolean; onOpenChange: (open: boolean) => void; onSignOut: () => void }): React.JSX.Element {
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="dialog-overlay" />
+        <Dialog.Content asChild aria-describedby={undefined}>
+          <m.section
+            className="sheet-content"
+            aria-label="Все разделы"
+            drag="y"
+            dragConstraints={{ top: 0, bottom: 0 }}
+            dragElastic={{ top: 0, bottom: .6 }}
+            onDragEnd={(_, info) => { if (info.offset.y > 90 || info.velocity.y > 600) onOpenChange(false) }}
+          >
+            <span className="sheet-grabber" aria-hidden="true" />
+            <div className="dialog-heading">
+              <Dialog.Title asChild><h2>Разделы</h2></Dialog.Title>
+              <Dialog.Close className="icon-button" aria-label="Закрыть меню"><X /></Dialog.Close>
+            </div>
+            <Navigation indicator="sheet-indicator" onNavigate={() => onOpenChange(false)} />
+            <button className="button secondary" onClick={onSignOut}><LogOut />Выйти</button>
+          </m.section>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  )
+}
+
 export function Layout(): React.JSX.Element {
   const { user, logout } = useAuth()
   const { children, studentId, setStudentId, noChildren } = useStudent()
   const [moreOpen, setMoreOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [commandsOpen, setCommandsOpen] = useState(false)
   const navigate = useNavigate()
+  const go = useSmoothNavigate()
   const location = useLocation()
   const queryClient = useQueryClient()
   const unread = useQuery({ queryKey: ['notifications'], queryFn: () => api<Notification[]>('/notifications?limit=50'), refetchInterval: 60_000 })
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      // KeyK — физическая клавиша, поэтому сочетание работает и в русской раскладке (Ctrl+Л).
+      if ((event.ctrlKey || event.metaKey) && event.code === 'KeyK') {
+        event.preventDefault()
+        setCommandsOpen((value) => !value)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  const signOut = useCallback(async () => { await logout(); navigate('/login', { replace: true }) }, [logout, navigate])
+  const openNotifications = useCallback(() => setNotificationsOpen(true), [])
   if (!user) return <></>
   const navigation = navigationFor(user)
   const primary = navigation.filter((item) => item.main).slice(0, 4)
   const unreadCount = unread.data?.filter((item) => !item.read_at).length ?? 0
-  const signOut = async () => { await logout(); navigate('/login', { replace: true }) }
-  const roleLine = user.roles.map((role) => roleNames[role]).join(' · ')
+  const roleLine = user.roles.map((role) => roleNames[role]).join(', ')
   return (
     <div className="app-layout">
+      <a className="skip-link" href="#main-content">Перейти к содержимому</a>
       <OfflineBanner />
       <aside className="sidebar">
-        <NavLink to="/today" className="brand">
+        <NavLink to="/today" className="brand" onClick={(event) => { if (isPlainClick(event)) { event.preventDefault(); go('/today') } }}>
           <span className="brand-mark" aria-hidden="true"><BookMark /></span>
           <span>Школьный<br />дневник</span>
         </NavLink>
-        <Navigation />
+        <Navigation indicator="sidebar-indicator" />
         <div className="sidebar-foot">
           <ShieldHalf aria-hidden="true" />
           <div><strong>Данные в безопасности</strong>Система работает в локальной сети школы</div>
@@ -133,7 +227,11 @@ export function Layout(): React.JSX.Element {
               </select>
             </div>
           )}
-          <button className="icon-button notification-button" onClick={() => setNotificationsOpen(true)} aria-label={`Уведомления, непрочитанных: ${unreadCount}`}>
+          <button type="button" className="command-trigger" onClick={() => setCommandsOpen(true)} aria-label="Поиск разделов и действий" aria-keyshortcuts="Control+K">
+            <Search aria-hidden="true" /><span>Поиск и переходы</span><kbd>Ctrl K</kbd>
+          </button>
+          <ThemeToggle />
+          <button className="icon-button notification-button" onClick={openNotifications} aria-label={`Уведомления, непрочитанных: ${unreadCount}`}>
             <Bell />{unreadCount > 0 && <span>{unreadCount}</span>}
           </button>
           <div className="user-summary">
@@ -142,7 +240,7 @@ export function Layout(): React.JSX.Element {
           </div>
           <button className="icon-button logout-button" onClick={signOut} aria-label="Выйти" title="Выйти"><LogOut aria-hidden="true" /></button>
         </header>
-        <main className="main-content" id="main-content">
+        <main className="main-content" id="main-content" tabIndex={-1}>
           {/* Родителю без связи с ребёнком нечего показать — объясняем почему на всех страницах, кроме настроек профиля. */}
           {noChildren && location.pathname !== '/settings' ? <UnlinkedParentNotice onlyParent={user.roles.every((role) => role === 'parent')} /> : null}
           {!noChildren || location.pathname === '/settings' || !user.roles.every((role) => role === 'parent') ? <Outlet /> : null}
@@ -150,23 +248,20 @@ export function Layout(): React.JSX.Element {
       </div>
       <nav className="mobile-nav" aria-label="Мобильная навигация">
         {primary.map(({ to, label, icon: Icon }) => (
-          <NavLink key={to} to={to} className={({ isActive }) => (isActive ? 'active' : '')}><Icon aria-hidden="true" /><span>{label}</span></NavLink>
+          <NavLink key={to} to={to} className={({ isActive }) => (isActive ? 'active' : '')} onClick={(event) => { if (isPlainClick(event)) { event.preventDefault(); go(to) } }}>
+            {({ isActive }) => (
+              <>
+                {isActive && <m.span layoutId="tab-indicator" className="tab-indicator" transition={indicatorSpring} aria-hidden="true" />}
+                <Icon aria-hidden="true" /><span>{label}</span>
+              </>
+            )}
+          </NavLink>
         ))}
         <button onClick={() => setMoreOpen(true)} className={moreOpen ? 'active' : ''}><Menu aria-hidden="true" /><span>Ещё</span></button>
       </nav>
-      {moreOpen && (
-        <div className="mobile-menu-overlay" onClick={() => setMoreOpen(false)}>
-          <section className="mobile-menu" role="dialog" aria-modal="true" aria-label="Все разделы" onClick={(event) => event.stopPropagation()}>
-            <div className="dialog-heading">
-              <h2>Разделы</h2>
-              <button className="icon-button" autoFocus onClick={() => setMoreOpen(false)} aria-label="Закрыть меню"><X /></button>
-            </div>
-            <Navigation onNavigate={() => setMoreOpen(false)} />
-            <button className="button secondary" onClick={signOut}><LogOut />Выйти</button>
-          </section>
-        </div>
-      )}
+      <MoreSheet open={moreOpen} onOpenChange={setMoreOpen} onSignOut={signOut} />
       <Notifications open={notificationsOpen} onOpenChange={setNotificationsOpen} />
+      <CommandPalette open={commandsOpen} onOpenChange={setCommandsOpen} navigation={navigation} onNavigate={go} onNotifications={openNotifications} onSignOut={signOut} />
     </div>
   )
 }

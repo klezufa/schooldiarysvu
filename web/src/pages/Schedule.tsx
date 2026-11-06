@@ -17,13 +17,15 @@ import { LessonPanel } from '../components/LessonPanel'
 const weekdays = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье']
 
 export function LessonCard({ lesson, onClick }: { lesson: Lesson; onClick?: () => void }): React.JSX.Element {
+  const now = Date.now()
+  const live = lesson.status !== 'cancelled' && new Date(lesson.starts_at).getTime() <= now && now < new Date(lesson.ends_at).getTime()
   const content = (
     <>
       <div className="lesson-time"><strong>{formatTime(lesson.starts_at)}</strong><span>{formatTime(lesson.ends_at)}</span></div>
       <div className="lesson-main">
         <div>
           <h3>{lesson.subject_name || 'Предмет'}</h3>
-          <StatusBadge tone={lessonTone(lesson.status)}>{lesson.status === 'cancelled' ? 'Отменён' : lesson.status === 'completed' ? 'Завершён' : 'По расписанию'}</StatusBadge>
+          {live ? <span className="now-badge">Идёт сейчас</span> : <StatusBadge tone={lessonTone(lesson.status)}>{lesson.status === 'cancelled' ? 'Отменён' : lesson.status === 'completed' ? 'Завершён' : 'По расписанию'}</StatusBadge>}
         </div>
         <p>{lesson.topic || 'Тема ещё не указана'}</p>
         {lesson.original_teacher_name && <small className="lesson-substitution">Замена · вместо: {lesson.original_teacher_name}</small>}
@@ -31,7 +33,7 @@ export function LessonCard({ lesson, onClick }: { lesson: Lesson; onClick?: () =
       </div>
     </>
   )
-  const className = `lesson-card ${lesson.status === 'cancelled' ? 'lesson-cancelled' : ''}`
+  const className = `lesson-card ${lesson.status === 'cancelled' ? 'lesson-cancelled' : ''} ${live ? 'lesson-now' : ''}`
   return onClick
     ? <button className={className} style={subjectStyle(lesson.subject_name)} onClick={onClick}>{content}</button>
     : <article className={className} style={subjectStyle(lesson.subject_name)}>{content}</article>

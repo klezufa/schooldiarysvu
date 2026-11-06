@@ -1,0 +1,193 @@
+/* Дизайн-токены «Тетрадь и доска». Рабочее поле — тетрадный лист в клетку, меню — школьная доска.
+   Смысл цвета: чернила — действия, красная ручка — проблемы и поля, маркер — «только что изменилось».
+   Тёмная тема — отдельно подобранные ступени, не инверсия; тема ставится атрибутом data-theme на <html>
+   (public/theme-init.js до отрисовки, затем ThemeProvider). Текстовые пары проверены на контраст AA. */
+:root {
+  color-scheme: light;
+  --font-sans: "Golos Text Variable", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Literata Variable", Georgia, "Times New Roman", serif;
+  --font-mono: "Cascadia Mono", Consolas, monospace;
+
+  /* шкала текста: 12 13 14 16 18 22 28 36 */
+  --fs-1: .75rem; --fs-2: .8125rem; --fs-3: .875rem; --fs-4: 1rem; --fs-5: 1.125rem; --fs-6: 1.375rem; --fs-7: 1.75rem; --fs-8: 2.25rem;
+  /* скругления по роли элемента */
+  --r-field: 8px; --r-button: 10px; --r-card: 14px; --r-dialog: 20px; --r-pill: 999px;
+  --radius: var(--r-card); --radius-sm: var(--r-button);
+  /* движение */
+  --ease-out: cubic-bezier(.2, .8, .2, 1); --ease-in: cubic-bezier(.4, 0, 1, 1); --ease-spring: cubic-bezier(.34, 1.4, .64, 1);
+  --dur-1: 120ms; --dur-2: 180ms; --dur-3: 260ms;
+  /* слои */
+  --z-sticky: 15; --z-nav: 20; --z-sheet: 80; --z-overlay: 90; --z-dialog: 100; --z-toast: 200;
+  /* клетка тетради */
+  --cell: 24px;
+
+  /* бумага и листы */
+  --bg: #f6f8fb;
+  --surface: #ffffff;
+  --surface-2: #f2f5fa;
+  --surface-3: #e8edf5;
+  --surface-raised: #ffffff;
+  --grid: #e9eef6;
+  --pen-line: #f2b8b2;
+  /* тушь */
+  --ink: #141b2d;
+  --ink-2: #39435a;
+  --muted: #5a6580;
+  --faint: #6b7590;
+  --line: #dfe5ef;
+  --line-strong: #c5cedd;
+  --line-soft: rgba(20, 27, 45, .07);
+  --axis: #c5cedd;
+  /* чернила */
+  --accent: #2b44d6;
+  --accent-hover: #2236b5;
+  --accent-ink: #2236b5;
+  --accent-soft: #eceffd;
+  --accent-line: #c6cef6;
+  --accent-line-strong: #9eabef;
+  --accent-tint: rgba(43, 68, 214, .06);
+  --on-accent: #ffffff;
+  --focus: #4f68f0;
+  --focus-ring: 0 0 0 3px rgba(79, 104, 240, .22);
+  /* состояния */
+  --danger: #c0322a; --danger-soft: #fcedeb; --danger-line: #f2c4bf; --danger-hover: #f9dcd8;
+  --warning: #8a5600; --warning-soft: #fff4da; --warning-line: #eed493; --warning-ink: #6b4300;
+  --success: #127041; --success-soft: #e3f4ea; --success-line: #b6dec7; --success-ink: #0e5a34;
+  --notify: #d9342b;
+  /* маркер */
+  --marker: #ffe58a; --marker-soft: #fff3c4; --marker-ink: #141b2d; --marker-flash: #ffe58a;
+  /* доска (меню и тёмные «шапки») */
+  --board: #1e3b32;
+  --board-2: #234539;
+  --board-ink: #e9f1ec;
+  --board-muted: #a9c2b6;
+  --board-hover: rgba(255, 255, 255, .07);
+  --board-raised: rgba(255, 255, 255, .08);
+  --board-line: rgba(255, 255, 255, .12);
+  --chalk: #f3f6f1;
+  --chalk-ink: #1e3b32;
+  /* тени по высоте слоя */
+  --shadow-1: 0 1px 2px rgba(20, 27, 45, .06), 0 1px 1px rgba(20, 27, 45, .03);
+  --shadow-2: 0 10px 28px -8px rgba(20, 27, 45, .18), 0 2px 6px rgba(20, 27, 45, .06);
+  --shadow-3: 0 28px 70px -14px rgba(20, 27, 45, .34), 0 4px 12px rgba(20, 27, 45, .08);
+  --shadow: var(--shadow-1);
+  --shadow-lift: var(--shadow-2);
+  --overlay: rgba(14, 20, 35, .42);
+  --topbar-bg: rgba(246, 248, 251, .93);
+  /* подсказки графиков */
+  --tooltip-bg: #141b2d; --tooltip-ink: #f1f4fa; --tooltip-muted: #aeb7cb; --crosshair: #9aa6bd;
+
+  /* оттенки плиток и значков */
+  --hue-blue: #1f55c8; --hue-blue-wash: #e7effd;
+  --hue-teal: #0b7472; --hue-teal-wash: #ddf3f1;
+  --hue-green: #11703f; --hue-green-wash: #e1f4e8;
+  --hue-amber: #8f5b00; --hue-amber-wash: #fff1d6;
+  --hue-violet: #5b43c9; --hue-violet-wash: #eeeafd;
+  --hue-rose: #b0305a; --hue-rose-wash: #fde8ef;
+  --pastel-blue: var(--hue-blue-wash); --pastel-green: var(--hue-green-wash); --pastel-amber: var(--hue-amber-wash);
+  --pastel-violet: var(--hue-violet-wash); --pastel-rose: var(--hue-rose-wash); --pastel-teal: var(--hue-teal-wash);
+
+  /* графики: категориальный порядок проверен на различимость при дальтонизме (validate_palette) */
+  --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100;
+  --series-5: #e87ba4; --series-6: #008300; --series-7: #6250d6; --series-8: #e34948;
+  --on-series: #ffffff;
+  --tone-good: #0ca30c; --tone-info: #2a78d6; --tone-warning: #e09a00; --tone-critical: #d03b3b; --tone-neutral: #8a97ad;
+
+  /* цвет предмета: полоса и заливка; номер выбирает lib/subjects.ts */
+  --subj-1: #2a78d6; --subj-1-wash: #e8f1fd;
+  --subj-2: #eb6834; --subj-2-wash: #fdeee7;
+  --subj-3: #1baf7a; --subj-3-wash: #e3f6ef;
+  --subj-4: #eda100; --subj-4-wash: #fdf3dc;
+  --subj-5: #e87ba4; --subj-5-wash: #fdedf3;
+  --subj-6: #008300; --subj-6-wash: #e2f2e2;
+  --subj-7: #6250d6; --subj-7-wash: #eeecfb;
+  --subj-8: #e34948; --subj-8-wash: #fdeaea;
+
+  /* иллюстрации: бумага остаётся бумагой и в тёмной теме, только чуть приглушается */
+  --ill-paper: #fdfdfb; --ill-paper-edge: #dde3ec; --ill-grid: #dbe4f3; --ill-rule: #c9d3e4; --ill-ink: #2b44d6; --ill-red: #c8372d;
+  --ill-shadow: rgba(20, 27, 45, .10);
+
+  /* совместимость со старыми именами */
+  --accent-dark: var(--accent-ink);
+  --navy: var(--board);
+  --navy-2: var(--board-2);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0e1714;
+  --surface: #15201c;
+  --surface-2: #1a2722;
+  --surface-3: #22322c;
+  --surface-raised: #1c2925;
+  --grid: #16221e;
+  --pen-line: #5a2f2c;
+  --ink: #e6ede8;
+  --ink-2: #c2cfc8;
+  --muted: #9db0a7;
+  --faint: #84978e;
+  --line: #263630;
+  --line-strong: #34473f;
+  --line-soft: rgba(255, 255, 255, .06);
+  --axis: #34473f;
+  --accent: #8fa8ff;
+  --accent-hover: #a9bcff;
+  --accent-ink: #a9bcff;
+  --accent-soft: #1c2740;
+  --accent-line: #34457a;
+  --accent-line-strong: #5068b0;
+  --accent-tint: rgba(143, 168, 255, .08);
+  --on-accent: #0e1530;
+  --focus: #8fa8ff;
+  --focus-ring: 0 0 0 3px rgba(143, 168, 255, .28);
+  --danger: #ff8a80; --danger-soft: #3a1f1d; --danger-line: #6b3330; --danger-hover: #4a2522;
+  --warning: #f0c46a; --warning-soft: #33290f; --warning-line: #6a5420; --warning-ink: #f5d48f;
+  --success: #7fd6a2; --success-soft: #15301f; --success-line: #2d5a3e; --success-ink: #a3e4bc;
+  --notify: #ff6b61;
+  --marker: #e8c547; --marker-soft: #3d3413; --marker-ink: #f6e7a6; --marker-flash: #6b5a1c;
+  --board: #12271f;
+  --board-2: #163028;
+  --board-ink: #e9f1ec;
+  --board-muted: #9fb9ad;
+  --board-hover: rgba(255, 255, 255, .06);
+  --board-raised: rgba(255, 255, 255, .06);
+  --board-line: rgba(255, 255, 255, .09);
+  --chalk: #e9f1ec;
+  --chalk-ink: #12271f;
+  --shadow-1: 0 1px 0 rgba(255, 255, 255, .03) inset, 0 1px 2px rgba(0, 0, 0, .35);
+  --shadow-2: 0 12px 30px -8px rgba(0, 0, 0, .6), 0 0 0 1px rgba(255, 255, 255, .05);
+  --shadow-3: 0 30px 80px -12px rgba(0, 0, 0, .75), 0 0 0 1px rgba(255, 255, 255, .06);
+  --overlay: rgba(2, 6, 5, .62);
+  --topbar-bg: rgba(14, 23, 20, .92);
+  --tooltip-bg: #e6ede8; --tooltip-ink: #0e1714; --tooltip-muted: #4c5c55; --crosshair: #5b6f66;
+  --hue-blue: #93b4ff; --hue-blue-wash: #1b2840;
+  --hue-teal: #6fd6cf; --hue-teal-wash: #12302e;
+  --hue-green: #86d9a6; --hue-green-wash: #163222;
+  --hue-amber: #f0c46a; --hue-amber-wash: #33290f;
+  --hue-violet: #b9a8ff; --hue-violet-wash: #262040;
+  --hue-rose: #ff9dbb; --hue-rose-wash: #3a1c28;
+  --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+  --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767;
+  --tone-good: #3fbf5f; --tone-info: #3987e5; --tone-warning: #fab219; --tone-critical: #e66767; --tone-neutral: #7d8f87;
+  --ill-paper: #dfe6e1; --ill-paper-edge: #9fb0a8; --ill-grid: #c3d0ca; --ill-rule: #a9b9b2; --ill-ink: #3248c4; --ill-red: #c23a30;
+  --ill-shadow: rgba(0, 0, 0, .35);
+  --subj-1: #3987e5; --subj-1-wash: #172638;
+  --subj-2: #d95926; --subj-2-wash: #33211a;
+  --subj-3: #199e70; --subj-3-wash: #12302a;
+  --subj-4: #c98500; --subj-4-wash: #302712;
+  --subj-5: #d55181; --subj-5-wash: #351d29;
+  --subj-6: #2f9b2f; --subj-6-wash: #162d18;
+  --subj-7: #9085e9; --subj-7-wash: #241f3d;
+  --subj-8: #e66767; --subj-8-wash: #361d1d;
+}
+
+/* Настройки доступности из «Профиля»: высокий контраст для обеих тем и увеличенный текст. */
+:root.high-contrast {
+  --ink: #05080f; --ink-2: #1e2536; --muted: #2f3850; --faint: #3d4660;
+  --line: #8a95ab; --line-strong: #5d6880; --accent: #1a2fb8; --accent-ink: #14248f; --accent-hover: #14248f;
+}
+:root[data-theme="dark"].high-contrast {
+  --ink: #ffffff; --ink-2: #e6ede8; --muted: #cbd8d1; --faint: #b3c3bb;
+  --line: #5b7066; --line-strong: #7f958a; --accent: #b4c4ff; --accent-ink: #cdd8ff; --accent-hover: #cdd8ff;
+}
+:root.large-text { font-size: 112.5%; }

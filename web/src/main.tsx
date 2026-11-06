@@ -2,11 +2,13 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { LazyMotion, MotionConfig } from 'motion/react'
 import { App } from './App'
 import { AuthProvider } from './auth'
 import { StudentProvider } from './student'
 import { ToastProvider } from './components/Toast'
 import { ErrorBoundary } from './components/UI'
+import { ThemeProvider } from './theme'
 import './styles.css'
 
 const queryClient = new QueryClient({
@@ -16,21 +18,30 @@ const queryClient = new QueryClient({
   },
 })
 
+const loadMotionFeatures = () => import('./motionFeatures').then((module) => module.default)
+
 const root = document.getElementById('root')
 if (!root) throw new Error('Root element not found')
 
 createRoot(root).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <ToastProvider>
-          <AuthProvider>
-            <StudentProvider>
-              <ErrorBoundary><App /></ErrorBoundary>
-            </StudentProvider>
-          </AuthProvider>
-        </ToastProvider>
-      </BrowserRouter>
-    </QueryClientProvider>
+    <ThemeProvider>
+      {/* reducedMotion="user" гасит движение по настройке системы. */}
+      <LazyMotion features={loadMotionFeatures} strict>
+        <MotionConfig reducedMotion="user">
+          <QueryClientProvider client={queryClient}>
+            <BrowserRouter>
+              <ToastProvider>
+                <AuthProvider>
+                  <StudentProvider>
+                    <ErrorBoundary><App /></ErrorBoundary>
+                  </StudentProvider>
+                </AuthProvider>
+              </ToastProvider>
+            </BrowserRouter>
+          </QueryClientProvider>
+        </MotionConfig>
+      </LazyMotion>
+    </ThemeProvider>
   </StrictMode>,
 )

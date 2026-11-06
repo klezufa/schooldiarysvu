@@ -270,6 +270,34 @@ for (const viewport of viewports) {
   }
 }
 
+// Контраст и прочие нарушения WCAG 2.1 AA уровня «серьёзно» и выше — в обеих темах. Тема «как в системе» следует
+// prefers-color-scheme; движение выключено, чтобы axe не мерил контраст на середине анимации.
+const contrastPages: Record<string, { login: string; paths: string[] }> = {
+  student: { login: 'demo-student1', paths: ['/today', '/grades', '/homework', '/schedule', '/settings'] },
+  teacher: { login: 'demo-teacher1', paths: ['/today', '/journal', '/reports'] },
+  admin: { login: 'demo-admin', paths: ['/admin', '/admin?tab=people', '/admin?view=substitutions'] },
+}
+for (const theme of ['light', 'dark'] as const) {
+  for (const [role, config] of Object.entries(contrastPages)) {
+    test(`${role} pages meet WCAG 2.1 AA in the ${theme} theme`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' })
+      await login(page, config.login, role)
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+      const violations: string[] = []
+      for (const path of config.paths) {
+        await page.goto(path)
+        await expect(page.locator('main h1').first()).toBeVisible()
+        await page.waitForLoadState('networkidle')
+        const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze()
+        for (const item of result.violations.filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')) {
+          violations.push(`${path} ${item.id}: ${item.nodes.slice(0, 3).map((node) => node.target.join(' ')).join(' | ')}`)
+        }
+      }
+      expect(violations).toEqual([])
+    })
+  }
+}
+
 test('administrator manages a user: create with roles, edit roles, reset password, deactivate and reactivate', async ({ page }) => {
   page.on('dialog', (dialog) => { void dialog.accept() })
   await login(page, 'demo-admin', 'admin')
