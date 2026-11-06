@@ -81,11 +81,12 @@
 >
 > ```bash
 > sudo git clone https://github.com/klezufa/schooldiarysvu.git /opt/schooldiary
-> cd /opt/schooldiary && sudo git checkout pilot-1
+> cd /opt/schooldiary && sudo git checkout pilot-2
 > ```
 >
-> Образы собираются на сервере из исходников (`docker compose up -d --build`); нужен только файл `.env`
-> с настройками сервера — его содержимое приведено в инструкции.
+> Образы собираются на сервере из исходников (`docker compose up -d --build`); PostgreSQL работает в контейнере,
+> база создаётся пустой. Нужен только файл `.env` с настройками сервера — его содержимое приведено в инструкции.
+> Без Docker — PostgreSQL 17 и службы systemd прямо в системе: **[docs/native-install.md](docs/native-install.md)**.
 
 Есть три способа запуска, выберите подходящий.
 
@@ -157,6 +158,7 @@ Linux-сервер (проверено на Ubuntu Server 24.04 LTS) с проф
 | --- | --- |
 | `scripts/backup.sh [--quiesce]` | резервная копия: база, вложения, manifest, контрольные суммы |
 | `scripts/restore.sh КАТАЛОГ` | восстановление со страховочной копией; рабочая база заменяется только после успешной проверки |
+| `scripts/native-backup.sh [--quiesce]` | то же, что `backup.sh`, для установки без Docker ([docs/native-install.md](docs/native-install.md)) |
 | `scripts/install-cert.sh FULLCHAIN KEY` | проверка и установка сертификата, перезагрузка Nginx без остановки |
 | `scripts/renew-cert.sh` | выпуск и продление сертификата Let's Encrypt (DNS-01) |
 | `scripts/check-cert.sh [--host]` | срок сертификата и что реально отдаёт сервер |
@@ -227,7 +229,7 @@ docs/           установка, эксплуатация, архитекту
 
 | Тема | Документы |
 | --- | --- |
-| Пилот в школе | [pilot](docs/pilot.md) — Ubuntu Server без HTTPS, план, обратная связь, переход к работе |
+| Пилот в школе | [pilot](docs/pilot.md) — Ubuntu Server без HTTPS, план, обратная связь, переход к работе · [native-install](docs/native-install.md) — то же без Docker: PostgreSQL 17 и systemd |
 | Установка и эксплуатация | [installation](docs/installation.md) · [https](docs/https.md) · [adguard-home](docs/adguard-home.md) · [network](docs/network.md) · [backup-restore](docs/backup-restore.md) · [update](docs/update.md) · [troubleshooting](docs/troubleshooting.md) |
 | Windows 11 | [windows-local](docs/windows-local.md) |
 | Устройство системы | [architecture](docs/architecture.md) · [security](docs/security.md) · [ux](docs/ux.md) · [решения (ADR)](docs/adr) |

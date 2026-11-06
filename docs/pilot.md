@@ -69,6 +69,27 @@
 
 ## 3. Установка
 
+Два способа — выберите один:
+
+| | Docker (этот раздел) | Без Docker — [native-install.md](native-install.md) |
+| --- | --- | --- |
+| PostgreSQL | в контейнере, отдельно не ставится | PostgreSQL 17 из официального репозитория, служба системы |
+| Сборка | `docker compose` собирает образы на сервере | Go и Node.js на сервере, сборка командами |
+| Службы | контейнеры, `docker compose ps` | systemd, `systemctl status` |
+| Обновление | `git checkout` + `docker compose build` | `git checkout` + пересборка + `systemctl restart` |
+| Когда выбрать | по умолчанию: меньше ручной работы | Docker на сервере нельзя или не нужен |
+
+Разделы 1, 2, 4, 6, 8, 9 и 12 общие для обоих способов. Для установки без Docker разделы 3, 5, 7, 10 и 11
+этого документа заменяет [native-install.md](native-install.md).
+
+**PostgreSQL в способе с Docker отдельно не устанавливается:** он работает в контейнере `postgres` из того же
+`docker-compose.yml`, его данные лежат в томе Docker, порт наружу не открыт. Пароль базы генерируется в `.env`
+(шаг 3.4), вводить его нигде не нужно.
+
+**Пилот начинается с пустой базы.** Тестовые данные не нужны и не устанавливаются: при первом запуске создаются
+только таблицы, первая учётная запись — системный администратор (раздел 6.1), дальше школа заводится с нуля
+через интерфейс. Демо-набор (`seed`) на сервере с `APP_ENV=production` запустить нельзя — утилита откажется.
+
 Все команды выполняются на сервере под пользователем с правами `sudo`.
 
 ### 3.1. Система и время
@@ -105,7 +126,7 @@ sudo systemctl enable --now docker
 ```bash
 sudo git clone https://github.com/klezufa/schooldiarysvu.git /opt/schooldiary
 cd /opt/schooldiary
-sudo git checkout pilot-1      # версия для пилота; не разворачивайте случайный коммит из main
+sudo git checkout pilot-2      # версия для пилота; не разворачивайте случайный коммит из main
 ```
 
 В репозитории всё, что нужно серверу: `docker-compose.yml`, Dockerfile сервера и интерфейса, настройки Nginx
@@ -150,7 +171,8 @@ sudo docker compose ps        # postgres, backend, worker, nginx — running (he
 curl -fsS http://192.168.10.20/health/ready ; echo     # {"status":"ready"}
 ```
 
-Backend при каждом запуске сам применяет миграции базы. Контейнеры поднимаются сами после перезагрузки
+При первом запуске PostgreSQL создаёт пустую базу, а backend — таблицы в ней (миграции встроены в программу
+и применяются при каждом запуске). Контейнеры поднимаются сами после перезагрузки
 сервера (`restart: unless-stopped`) — проверьте это один раз: `sudo reboot`, затем снова `docker compose ps`.
 
 ## 4. Имя вместо IP (необязательно)
@@ -416,7 +438,7 @@ sudo docker compose up -d                     # поднять всё, что о
 cd /opt/schooldiary
 sudo bash scripts/backup.sh --quiesce --label pre-update
 sudo git fetch --tags
-sudo git checkout pilot-2                     # новый тег с исправлениями
+sudo git checkout pilot-3                     # новый тег с исправлениями
 sudo DIARY_VERSION="$(git describe --tags --always)" docker compose build --pull
 sudo docker compose up -d
 sudo docker compose ps
